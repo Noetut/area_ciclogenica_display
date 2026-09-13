@@ -5,7 +5,7 @@
 Application::Application()
     : m_isRunning(false)
     , m_targetMonitorIndex(1)
-    , m_isFullBlinkActive(true)
+    , m_isFullBlinkActive(false)
     , m_blinkTimer(0.0)
     , m_blinkInterval(1.0)
     , m_allSquaresOn(true)
@@ -15,8 +15,11 @@ Application::Application()
 Application::~Application() {
 }
 
-bool Application::Initialize(int targetMonitorIndex) {
+bool Application::Initialize(int targetMonitorIndex, bool enableBlink, double blinkInterval) {
     m_targetMonitorIndex = targetMonitorIndex;
+    m_isFullBlinkActive = enableBlink;
+    m_blinkInterval = (blinkInterval > 0.0) ? blinkInterval : 1.0;
+    m_blinkTimer = 0.0;
 
     std::cout << "[Application] Initializing Patron Animation App..." << std::endl;
 
@@ -42,13 +45,16 @@ bool Application::Initialize(int targetMonitorIndex) {
     std::cout << "[Application] Total pattern squares loaded: " << m_grid.GetCount() << std::endl;
     std::cout << "---------------------------------------------------------" << std::endl;
     std::cout << "                      CONTROLS                           " << std::endl;
-    std::cout << "  [SPACE] Toggle 1-second Full Blink loop (Pause / Resume)" << std::endl;
     std::cout << "  [1 - 9] Toggle individual square ON/OFF                  " << std::endl;
     std::cout << "  [A]     Turn ALL squares ON                             " << std::endl;
     std::cout << "  [C]     Turn ALL squares OFF (Clear to black)           " << std::endl;
     std::cout << "  [ESC]   Exit application                                " << std::endl;
     std::cout << "---------------------------------------------------------" << std::endl;
-    std::cout << "[Application] Starting in FULL BLINK mode (1s interval)..." << std::endl;
+    if (m_isFullBlinkActive) {
+        std::cout << "[Application] Blink mode: ACTIVE (" << m_blinkInterval << "s interval)" << std::endl;
+    } else {
+        std::cout << "[Application] Blink mode: OFF (Static display)" << std::endl;
+    }
 
     m_isRunning = true;
     return true;
@@ -83,14 +89,6 @@ void Application::SetFullBlinkActive(bool active) {
 void Application::HandleKeyDown(WPARAM key) {
     if (key == VK_ESCAPE) {
         m_isRunning = false;
-        return;
-    }
-
-    if (key == VK_SPACE) {
-        m_isFullBlinkActive = !m_isFullBlinkActive;
-        m_blinkTimer = 0.0;
-        std::cout << "[Application] Full Blink Loop: " 
-                  << (m_isFullBlinkActive ? "RESUMED (1s interval)" : "PAUSED") << std::endl;
         return;
     }
 

@@ -9,7 +9,7 @@ A lightweight C++ Win32 application designed to project and display calibrated a
 - **Multi-Monitor Support**: Automatically targets a secondary display (1920x1080 borderless window) with fallback to the primary monitor.
 - **Double-Buffered Rendering**: Smooth, flicker-free 60 FPS rendering using Win32 GDI memory DCs.
 - **Calibrated Pattern Grid**: Maps 9 precise rectangular display zones (vinyl slots and frames) extracted from `Patrón.png`.
-- **Interactive Controls & Animation**: Built-in 1-second blink loop with manual keyboard controls to toggle individual zones or all zones simultaneously.
+- **Interactive Controls & Animation**: Blinking is off by default. Supports optional `--blink` flag, or manual keyboard controls to toggle individual zones or all zones simultaneously.
 
 ---
 
@@ -17,7 +17,6 @@ A lightweight C++ Win32 application designed to project and display calibrated a
 
 | Key | Action |
 |:---|:---|
-| <kbd>Space</kbd> | Pause / Resume the 1-second full blink loop |
 | <kbd>1</kbd> - <kbd>9</kbd> | Toggle corresponding pattern zone ON / OFF |
 | <kbd>A</kbd> | Turn **ALL** zones ON |
 | <kbd>C</kbd> | Turn **ALL** zones OFF (clear to black) |
@@ -40,11 +39,14 @@ cmake --build build
 
 ### Run
 ```powershell
-# Run on secondary monitor (default: monitor index 1)
-.\build\PatronAnimation.exe 1
+# Static display (blinking OFF by default, Monitor 2)
+.\build\PatronAnimation.exe --display 1
 
-# Run on primary monitor (monitor index 0)
-.\build\PatronAnimation.exe 0
+# Enable blinking with custom interval in seconds (e.g., 0.5s)
+.\build\PatronAnimation.exe --display 1 --blink 0.5
+
+# Run on primary monitor
+.\build\PatronAnimation.exe --display 0
 ```
 
 ---

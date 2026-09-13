@@ -11,8 +11,8 @@ public:
     Application();
     ~Application();
 
-    // Initialize application targeting display index (default 1 for 2nd monitor)
-    bool Initialize(int targetMonitorIndex = 1);
+    // Initialize application targeting display index (default 1 for 2nd monitor) and blink options
+    bool Initialize(int targetMonitorIndex = 1, bool enableBlink = false, double blinkInterval = 1.0);
 
     // Main application engine loop
     void Run();

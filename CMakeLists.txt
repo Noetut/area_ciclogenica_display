@@ -32,3 +32,4 @@ add_executable(PatronAnimation ${SOURCES} ${HEADERS})
 target_link_libraries(PatronAnimation PRIVATE gdi32 user32)
 
 message(STATUS "Configured PatronAnimation target for Win32 build.")
+message(STATUS "Run command: ./PatronAnimation --display 1 --blink 0.5 (omit --blink to keep it off)")

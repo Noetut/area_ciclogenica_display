@@ -59,9 +59,13 @@ cmd /c "set PATH=C:\Program Files\CMake\bin;C:\Users\noeam\AppData\Local\Microso
 
 ### Execution:
 ```powershell
-.\build\PatronAnimation.exe 1
+# Default: Monitor 2, blinking OFF
+.\build\PatronAnimation.exe --display 1
+
+# Blinking active with custom interval (e.g. 0.5s):
+.\build\PatronAnimation.exe --display 1 --blink 0.5
 ```
-*(Arg `1` = Monitor 2; Arg `0` = Monitor 1. Press `ESC` to exit).*
+*(Options: `--display <id>`, `--blink <sec>`. Press `ESC` to exit, `SPACE` to toggle blink).*
 
 ---
 
