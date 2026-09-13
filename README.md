@@ -19,7 +19,7 @@ A lightweight C++ Win32 application designed to project and display calibrated a
 |:---|:---|
 | <kbd>1</kbd> - <kbd>9</kbd> | Toggle corresponding pattern zone ON / OFF |
 | <kbd>A</kbd> | Turn **ALL** zones ON |
-| <kbd>C</kbd> | Turn **ALL** zones OFF (clear to black) |
+| <kbd>O</kbd> | Turn **ALL** zones OFF (clear to black) |
 | <kbd>ESC</kbd> | Exit the application |
 
 ---

@@ -47,7 +47,7 @@ bool Application::Initialize(int targetMonitorIndex, bool enableBlink, double bl
     std::cout << "                      CONTROLS                           " << std::endl;
     std::cout << "  [1 - 9] Toggle individual square ON/OFF                  " << std::endl;
     std::cout << "  [A]     Turn ALL squares ON                             " << std::endl;
-    std::cout << "  [C]     Turn ALL squares OFF (Clear to black)           " << std::endl;
+    std::cout << "  [O]     Turn ALL squares OFF (Clear to black)           " << std::endl;
     std::cout << "  [ESC]   Exit application                                " << std::endl;
     std::cout << "---------------------------------------------------------" << std::endl;
     if (m_isFullBlinkActive) {
@@ -109,7 +109,7 @@ void Application::HandleKeyDown(WPARAM key) {
         return;
     }
 
-    if (key == 'C' || key == 'c') {
+    if (key == 'O' || key == 'o') {
         SetAllSquaresVisible(false);
         std::cout << "[Application] All squares turned OFF (Clear)." << std::endl;
         return;
