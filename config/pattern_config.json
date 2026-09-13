@@ -1,0 +1,119 @@
+{
+    "version": "1.1",
+    "reference_image": "Patrón.png",
+    "canvas": {
+        "width": 1920,
+        "height": 1080
+    },
+    "total_boxes": 9,
+    "boxes": [
+        {
+            "id": 0,
+            "name": "vinyl_turboviolencia",
+            "position": "left_top",
+            "description": "Left column, top square",
+            "x": 85,
+            "y": 81,
+            "width": 301,
+            "height": 251,
+            "center_x": 235.5,
+            "center_y": 206.5
+        },
+        {
+            "id": 1,
+            "name": "vinyl_cancionero",
+            "position": "left_middle",
+            "description": "Left column, middle square",
+            "x": 90,
+            "y": 390,
+            "width": 305,
+            "height": 248,
+            "center_x": 242.5,
+            "center_y": 514.0
+        },
+        {
+            "id": 2,
+            "name": "vinyl_mecharadio",
+            "position": "left_bottom",
+            "description": "Left column, bottom square",
+            "x": 90,
+            "y": 691,
+            "width": 301,
+            "height": 256,
+            "center_x": 240.5,
+            "center_y": 819.0
+        },
+        {
+            "id": 3,
+            "name": "frame_aneto",
+            "position": "center_upper_left",
+            "description": "Upper group, left rectangle",
+            "x": 561,
+            "y": 278,
+            "width": 260,
+            "height": 163,
+            "center_x": 691.0,
+            "center_y": 359.5
+        },
+        {
+            "id": 4,
+            "name": "frame_brais_clouds",
+            "position": "center_upper_middle",
+            "description": "Upper group, middle rectangle",
+            "x": 893,
+            "y": 304,
+            "width": 187,
+            "height": 114,
+            "center_x": 986.5,
+            "center_y": 361.0
+        },
+        {
+            "id": 5,
+            "name": "frame_brais_eyes",
+            "position": "center_upper_right",
+            "description": "Upper group, right rectangle",
+            "x": 1181,
+            "y": 309,
+            "width": 263,
+            "height": 166,
+            "center_x": 1312.5,
+            "center_y": 392.0
+        },
+        {
+            "id": 6,
+            "name": "frame_green_screen",
+            "position": "center_lower_left",
+            "description": "Lower group, left rectangle",
+            "x": 644,
+            "y": 532,
+            "width": 215,
+            "height": 233,
+            "center_x": 751.5,
+            "center_y": 648.5
+        },
+        {
+            "id": 7,
+            "name": "frame_pepus",
+            "position": "center_lower_middle",
+            "description": "Lower group, middle rectangle",
+            "x": 985,
+            "y": 475,
+            "width": 110,
+            "height": 134,
+            "center_x": 1040.0,
+            "center_y": 542.0
+        },
+        {
+            "id": 8,
+            "name": "frame_margarita",
+            "position": "center_lower_right",
+            "description": "Lower group, right rectangle",
+            "x": 1170,
+            "y": 535,
+            "width": 135,
+            "height": 156,
+            "center_x": 1237.5,
+            "center_y": 613.0
+        }
+    ]
+}

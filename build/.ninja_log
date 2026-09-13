@@ -1,0 +1,14 @@
+# ninja log v7
+29	1466	8110318895233132	CMakeFiles/PatronAnimation.dir/src/render/RenderEngine.cpp.obj	6544f1bdb36140b2
+18	1500	8110318895112637	CMakeFiles/PatronAnimation.dir/src/main.cpp.obj	5d39ce6b9d2e73d0
+24	1505	8110318895178059	CMakeFiles/PatronAnimation.dir/src/display/DisplayManager.cpp.obj	d89fff1946d032d
+34	1606	8110318895283216	CMakeFiles/PatronAnimation.dir/src/app/Application.cpp.obj	2f0e32dac66db249
+1606	1760	8110318911004078	PatronAnimation.exe	91567b693cbc1402
+11	154	8110321776166971	build.ninja	6c4f232b40b30bb6
+11	154	8110321776166971	D:/Proyectos/Área Ciclogénica Video/build/cmake_install.cmake	6c4f232b40b30bb6
+26	1454	8110321776682420	CMakeFiles/PatronAnimation.dir/src/render/RenderEngine.cpp.obj	6544f1bdb36140b2
+21	1458	8110321776632416	CMakeFiles/PatronAnimation.dir/src/display/DisplayManager.cpp.obj	d89fff1946d032d
+15	1470	8110321776577310	CMakeFiles/PatronAnimation.dir/src/main.cpp.obj	5d39ce6b9d2e73d0
+36	1480	8110321776787557	CMakeFiles/PatronAnimation.dir/src/model/PatternGrid.cpp.obj	bbd0c905e0d61251
+31	1593	8110321776732535	CMakeFiles/PatronAnimation.dir/src/app/Application.cpp.obj	2f0e32dac66db249
+1593	1723	8110321792356985	PatronAnimation.exe	fbc7b79c20073cec

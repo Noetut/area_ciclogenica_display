@@ -1,0 +1,3 @@
+D:/Proyectos/Área Ciclogénica Video/build/CMakeFiles/PatronAnimation.dir
+D:/Proyectos/Área Ciclogénica Video/build/CMakeFiles/edit_cache.dir
+D:/Proyectos/Área Ciclogénica Video/build/CMakeFiles/rebuild_cache.dir
