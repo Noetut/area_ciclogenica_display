@@ -13,24 +13,6 @@ A lightweight C++ Win32 application designed to project and display calibrated a
 
 ---
 
-## Pattern Zones (Boxes)
-
-| ID / Key | Name | Zone Description | Position & Size (X, Y, W, H) |
-|:---:|:---|:---|:---|
-| **1** | `VinylTurboviolencia` | Left - Top | 85, 81, 301, 251 |
-| **2** | `VinylCancionero` | Left - Middle | 90, 390, 305, 248 |
-| **3** | `VinylMecharadio` | Left - Bottom | 90, 691, 301, 256 |
-| **4** | `FrameAneto` | Center - Upper Left | 561, 278, 260, 163 |
-| **5** | `FrameBraisClouds` | Center - Upper Middle | 893, 304, 187, 114 |
-| **6** | `FrameBraisEyes` | Center - Upper Right | 1181, 309, 263, 166 |
-| **7** | `FrameGreenScreen` | Center - Lower Left | 644, 532, 215, 233 |
-| **8** | `FramePepus` | Center - Lower Middle | 985, 475, 110, 134 |
-| **9** | `FrameMargarita` | Center - Lower Right | 1170, 535, 135, 156 |
-
-*Box coordinates are defined in `config/pattern_config.json` and `src/model/PatternBoxes.h`.*
-
----
-
 ## Controls
 
 | Key | Action |
