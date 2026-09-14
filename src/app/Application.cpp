@@ -23,6 +23,12 @@ const COLORREF kCenterCross     = RGB(0, 180, 255);
 const COLORREF kHudText         = RGB(220, 220, 220);
 const COLORREF kLabelText       = RGB(140, 140, 140);
 
+// --- Transparency levels (0 = invisible, 255 = solid) ---------------------
+const BYTE kHudBgAlpha          = 120;  // Semi-transparent HUD box (~47% opacity, squares show through)
+const BYTE kHudTextAlpha        = 180;  // Semi-transparent HUD text (~70% opacity)
+const BYTE kLabelBgAlpha        = 100;  // Semi-transparent area label backing box (~39% opacity)
+const BYTE kLabelTextAlpha      = 180;  // Semi-transparent area label text (~70% opacity)
+
 // --- Calibration overlay layout (pixels) ----------------------------------
 const int kHandleHalfSize        = 4;
 const int kActiveHandleHalfSize  = 7;
@@ -277,7 +283,8 @@ void Application::RenderCalibrationOverlay() {
         m_renderEngine.DrawHudText(area.quad.corners[0].x + kAreaLabelInset,
                                    area.quad.corners[0].y + kAreaLabelInset,
                                    label.str(),
-                                   isSelected ? kSelectedOutline : kLabelText);
+                                   isSelected ? kSelectedOutline : kLabelText,
+                                   kLabelBgAlpha, kLabelTextAlpha);
 
         if (!isSelected) continue;
 
@@ -303,7 +310,8 @@ void Application::RenderCalibrationOverlay() {
 
     if (m_calibration.ShowHud()) {
         m_renderEngine.DrawHudText(kHudOriginX, kHudOriginY,
-                                   m_calibration.BuildHudText(), kHudText);
+                                   m_calibration.BuildHudText(), kHudText,
+                                   kHudBgAlpha, kHudTextAlpha);
     }
 }
 

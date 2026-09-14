@@ -1,5 +1,7 @@
 #include "RenderEngine.h"
 
+#include <cstdint>
+#include <cstring>
 #include <iostream>
 
 namespace {
@@ -34,6 +36,12 @@ RenderEngine::RenderEngine()
     , m_hudFont(NULL)
     , m_width(0)
     , m_height(0)
+    , m_scratchDC(NULL)
+    , m_scratchBitmap(NULL)
+    , m_scratchOldBitmap(NULL)
+    , m_scratchBits(NULL)
+    , m_scratchWidth(0)
+    , m_scratchHeight(0)
 {
 }
 
@@ -125,6 +133,24 @@ void RenderEngine::Cleanup() {
         ReleaseDC(m_hwnd, m_hdc);
         m_hdc = NULL;
     }
+
+    if (m_scratchDC) {
+        if (m_scratchOldBitmap) {
+            SelectObject(m_scratchDC, m_scratchOldBitmap);
+            m_scratchOldBitmap = NULL;
+        }
+        DeleteDC(m_scratchDC);
+        m_scratchDC = NULL;
+    }
+
+    if (m_scratchBitmap) {
+        DeleteObject(m_scratchBitmap);
+        m_scratchBitmap = NULL;
+    }
+
+    m_scratchBits = NULL;
+    m_scratchWidth = 0;
+    m_scratchHeight = 0;
 }
 
 void RenderEngine::Resize(int width, int height) {
@@ -283,7 +309,46 @@ void RenderEngine::DrawCross(const Point2i& point, int armLength, COLORREF color
     SelectObject(m_memDC, oldPen);
 }
 
-void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF color) {
+void RenderEngine::EnsureScratchBuffer(int minWidth, int minHeight) {
+    if (m_scratchDC && m_scratchBitmap && minWidth <= m_scratchWidth && minHeight <= m_scratchHeight) {
+        return;
+    }
+
+    if (m_scratchDC) {
+        if (m_scratchOldBitmap) {
+            SelectObject(m_scratchDC, m_scratchOldBitmap);
+            m_scratchOldBitmap = NULL;
+        }
+        DeleteDC(m_scratchDC);
+        m_scratchDC = NULL;
+    }
+    if (m_scratchBitmap) {
+        DeleteObject(m_scratchBitmap);
+        m_scratchBitmap = NULL;
+    }
+
+    m_scratchWidth = (minWidth > m_scratchWidth) ? minWidth : m_scratchWidth;
+    m_scratchHeight = (minHeight > m_scratchHeight) ? minHeight : m_scratchHeight;
+    if (m_scratchWidth < 512) m_scratchWidth = 512;
+    if (m_scratchHeight < 512) m_scratchHeight = 512;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = m_scratchWidth;
+    bmi.bmiHeader.biHeight = -m_scratchHeight; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    m_scratchDC = CreateCompatibleDC(m_memDC ? m_memDC : m_hdc);
+    m_scratchBitmap = CreateDIBSection(m_scratchDC, &bmi, DIB_RGB_COLORS, &m_scratchBits, NULL, 0);
+    if (m_scratchDC && m_scratchBitmap) {
+        m_scratchOldBitmap = (HBITMAP)SelectObject(m_scratchDC, m_scratchBitmap);
+    }
+}
+
+void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF color,
+                               BYTE bgAlpha, BYTE textAlpha) {
     if (!m_memDC || text.empty()) return;
 
     HGDIOBJ oldFont = m_hudFont ? SelectObject(m_memDC, m_hudFont) : NULL;
@@ -294,19 +359,106 @@ void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF 
     DrawTextW(m_memDC, text.c_str(), static_cast<int>(text.size()), &measured,
               format | DT_CALCRECT);
 
-    RECT backing = { x, y,
-                     x + (measured.right - measured.left) + kHudTextPadding * 2,
-                     y + (measured.bottom - measured.top) + kHudTextPadding * 2 };
-    FillRect(m_memDC, &backing, m_blackBrush ? m_blackBrush : (HBRUSH)GetStockObject(BLACK_BRUSH));
-
-    RECT textRect = { backing.left + kHudTextPadding, backing.top + kHudTextPadding,
-                      backing.right - kHudTextPadding, backing.bottom - kHudTextPadding };
-
-    int oldMode = SetBkMode(m_memDC, TRANSPARENT);
-    COLORREF oldColor = SetTextColor(m_memDC, color);
-    DrawTextW(m_memDC, text.c_str(), static_cast<int>(text.size()), &textRect, format);
-    SetTextColor(m_memDC, oldColor);
-    SetBkMode(m_memDC, oldMode);
-
     if (oldFont) SelectObject(m_memDC, oldFont);
+
+    int textW = measured.right - measured.left;
+    int textH = measured.bottom - measured.top;
+    if (textW <= 0 || textH <= 0) return;
+
+    int totalW = textW + kHudTextPadding * 2;
+    int totalH = textH + kHudTextPadding * 2;
+
+    EnsureScratchBuffer(totalW, totalH);
+    if (!m_scratchDC || !m_scratchBits) return;
+
+    // Clear the active (totalW x totalH) rectangle to 0 in scratch buffer
+    uint32_t* px = static_cast<uint32_t*>(m_scratchBits);
+    for (int row = 0; row < totalH; ++row) {
+        std::memset(&px[row * m_scratchWidth], 0, totalW * sizeof(uint32_t));
+    }
+
+    // Select font in scratch DC
+    HGDIOBJ oldScratchFont = m_hudFont ? SelectObject(m_scratchDC, m_hudFont) : NULL;
+    int oldMode = SetBkMode(m_scratchDC, TRANSPARENT);
+    // Draw text in pure white so glyph antialiasing/intensity is directly readable in pixel components
+    COLORREF oldColor = SetTextColor(m_scratchDC, RGB(255, 255, 255));
+
+    RECT textRect = { kHudTextPadding, kHudTextPadding,
+                      totalW - kHudTextPadding, totalH - kHudTextPadding };
+    DrawTextW(m_scratchDC, text.c_str(), static_cast<int>(text.size()), &textRect, format);
+
+    SetTextColor(m_scratchDC, oldColor);
+    SetBkMode(m_scratchDC, oldMode);
+    if (oldScratchFont) SelectObject(m_scratchDC, oldScratchFont);
+
+    // Color channels of the requested text color
+    const int targetR = GetRValue(color);
+    const int targetG = GetGValue(color);
+    const int targetB = GetBValue(color);
+
+    // Compute premultiplied RGBA for each pixel in totalW x totalH
+    for (int row = 0; row < totalH; ++row) {
+        uint32_t* rowPx = &px[row * m_scratchWidth];
+        for (int col = 0; col < totalW; ++col) {
+            uint32_t val = rowPx[col];
+            // Extract glyph intensity from the white text drawing (values 0..255)
+            int glyph = val & 0xFF;
+
+            if (glyph == 0) {
+                // Background pixel: black backing box with bgAlpha
+                // Premultiplied black RGB is (0, 0, 0), alpha is bgAlpha
+                rowPx[col] = (static_cast<uint32_t>(bgAlpha) << 24);
+            } else {
+                // Antialiased text pixel: interpolate alpha between bgAlpha and textAlpha
+                int a = bgAlpha + ((textAlpha - bgAlpha) * glyph) / 255;
+                // Unmultiplied color interpolated towards target text color
+                int r = (targetR * glyph) / 255;
+                int g = (targetG * glyph) / 255;
+                int b = (targetB * glyph) / 255;
+                // Premultiply by alpha for AC_SRC_ALPHA
+                int r_pre = (r * a) / 255;
+                int g_pre = (g * a) / 255;
+                int b_pre = (b * a) / 255;
+                rowPx[col] = (static_cast<uint32_t>(a) << 24) |
+                             (static_cast<uint32_t>(r_pre) << 16) |
+                             (static_cast<uint32_t>(g_pre) << 8) |
+                             static_cast<uint32_t>(b_pre);
+            }
+        }
+    }
+
+    // Clip to destination surface boundaries so AlphaBlend never fails
+    int srcX = 0;
+    int srcY = 0;
+    int dstX = x;
+    int dstY = y;
+    int drawW = totalW;
+    int drawH = totalH;
+
+    if (dstX < 0) {
+        srcX -= dstX;
+        drawW += dstX;
+        dstX = 0;
+    }
+    if (dstY < 0) {
+        srcY -= dstY;
+        drawH += dstY;
+        dstY = 0;
+    }
+    if (dstX + drawW > m_width) {
+        drawW = m_width - dstX;
+    }
+    if (dstY + drawH > m_height) {
+        drawH = m_height - dstY;
+    }
+    if (drawW <= 0 || drawH <= 0) return;
+
+    BLENDFUNCTION bf = {};
+    bf.BlendOp = AC_SRC_OVER;
+    bf.BlendFlags = 0;
+    bf.SourceConstantAlpha = 255;
+    bf.AlphaFormat = AC_SRC_ALPHA;
+
+    AlphaBlend(m_memDC, dstX, dstY, drawW, drawH,
+               m_scratchDC, srcX, srcY, drawW, drawH, bf);
 }

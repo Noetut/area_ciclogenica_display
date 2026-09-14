@@ -37,8 +37,10 @@ public:
     void DrawQuadOutline(const Quad& quad, COLORREF color, int thickness);
     void DrawHandle(const Point2i& point, int halfSize, COLORREF fill, COLORREF border);
     void DrawCross(const Point2i& point, int armLength, COLORREF color);
-    // Text with a solid black backing box, so it stays readable over lit areas.
-    void DrawHudText(int x, int y, const std::wstring& text, COLORREF color);
+    // Text with a semi-transparent backing box and semi-transparent text,
+    // so calibrated areas underneath remain visible while keeping text readable.
+    void DrawHudText(int x, int y, const std::wstring& text, COLORREF color,
+                     BYTE bgAlpha = 120, BYTE textAlpha = 180);
 
     HDC GetBackBufferDC() const { return m_memDC; }
 
@@ -53,6 +55,7 @@ private:
     // every one of the 60 frames per second.
     HPEN GetPen(COLORREF color, int thickness);
     void FillQuadWithBrush(const Quad& quad, HBRUSH brush);
+    void EnsureScratchBuffer(int minWidth, int minHeight);
 
     HWND    m_hwnd;
     HDC     m_hdc;
@@ -66,6 +69,14 @@ private:
     std::vector<CachedPen> m_pens;
     int     m_width;
     int     m_height;
+
+    // Reusable scratch 32-bit DIB buffer for alpha-blended HUD text rendering
+    HDC     m_scratchDC;
+    HBITMAP m_scratchBitmap;
+    HBITMAP m_scratchOldBitmap;
+    void*   m_scratchBits;
+    int     m_scratchWidth;
+    int     m_scratchHeight;
 };
 
 #endif // RENDER_ENGINE_H
