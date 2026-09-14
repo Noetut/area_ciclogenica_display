@@ -40,4 +40,8 @@ inline std::wstring AnsiToWide(const char* text) {
     return result;
 }
 
+inline std::wstring AnsiToWide(const std::string& text) {
+    return AnsiToWide(text.c_str());
+}
+
 #endif // STRING_UTIL_H

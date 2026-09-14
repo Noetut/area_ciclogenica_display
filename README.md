@@ -21,6 +21,8 @@ A lightweight C++ Win32 application that projects calibrated pattern areas onto 
 
 | Key | Action |
 |:---|:---|
+| <kbd>Space</kbd> | Play / Pause animation sequence |
+| <kbd>R</kbd> | Restart animation from beginning |
 | <kbd>1</kbd> – <kbd>9</kbd> | Toggle the corresponding area ON / OFF |
 | <kbd>A</kbd> | Turn **ALL** areas ON |
 | <kbd>O</kbd> | Turn **ALL** areas OFF (clear to black) |
@@ -118,6 +120,9 @@ cmake --build build
 # Start straight in calibration mode
 .\build\PatronAnimation.exe 1 --calibrate
 
+# Load a specific animation script
+.\build\PatronAnimation.exe 0 --anim animations\sequential_wave.txt
+
 # Use an explicit config file
 .\build\PatronAnimation.exe 1 --config C:\path\to\pattern_config.json
 ```
@@ -132,12 +137,15 @@ Coordinates are absolute pixels for the calibration canvas. Running on a monitor
 
 ```
 area_ciclogenica_display/
+├── animations/
+│   └── sequential_wave.txt    # Text-based animation script
 ├── config/
 │   └── pattern_config.json    # Single source of truth: canvas + area corners
 ├── images/
 │   ├── Patrón.png             # Target reference pattern
 │   └── pattern_detected_boxes.png # Visual overlay of detected zones
 ├── src/
+│   ├── anim/                  # Text animation parser, sequencer & playback controller
 │   ├── app/                   # Application lifecycle, mode dispatch & main loop
 │   ├── calib/                 # Interactive calibration controller
 │   ├── display/               # Monitor enumeration & borderless window creation

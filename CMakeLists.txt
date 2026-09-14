@@ -17,6 +17,8 @@ set(SOURCES
     src/model/PatternGrid.cpp
     src/model/PatternConfig.cpp
     src/calib/CalibrationController.cpp
+    src/anim/AnimationParser.cpp
+    src/anim/AnimationController.cpp
 )
 
 # Headers
@@ -29,6 +31,9 @@ set(HEADERS
     src/model/PatternGrid.h
     src/model/PatternConfig.h
     src/calib/CalibrationController.h
+    src/anim/AnimationTypes.h
+    src/anim/AnimationParser.h
+    src/anim/AnimationController.h
     src/util/StringUtil.h
 )
 

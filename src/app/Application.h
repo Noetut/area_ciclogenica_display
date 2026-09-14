@@ -4,6 +4,7 @@
 #include <chrono>
 #include <string>
 
+#include "anim/AnimationController.h"
 #include "calib/CalibrationController.h"
 #include "display/DisplayManager.h"
 #include "model/PatternConfig.h"
@@ -13,6 +14,7 @@
 struct AppOptions {
     int          monitorIndex = 1;  // 0-indexed; 1 = second monitor
     std::wstring configPath;        // Empty means "resolve automatically"
+    std::string  animationPath;     // Path to .txt animation file
     bool         startInCalibration = false;
 };
 
@@ -41,6 +43,9 @@ public:
     PatternGrid& GetGrid() { return m_grid; }
     const PatternGrid& GetGrid() const { return m_grid; }
 
+    AnimationController& GetAnimation() { return m_animController; }
+    const AnimationController& GetAnimation() const { return m_animController; }
+
 private:
     void ProcessEvents();
     void HandleKeyDown(WPARAM key);
@@ -54,6 +59,7 @@ private:
     RenderEngine          m_renderEngine;
     PatternGrid           m_grid;
     CalibrationController m_calibration;
+    AnimationController   m_animController;
 
     bool    m_isRunning;
     int     m_targetMonitorIndex;

@@ -15,6 +15,8 @@ void PrintUsage() {
               << "  --monitor <n>        Same as the positional argument\n"
               << "  --config <path>      Path to pattern_config.json. Default: auto-resolved\n"
               << "                       relative to the executable directory\n"
+              << "  --anim <path>        Path to animation .txt file. Default: auto-resolved\n"
+              << "                       from animations/ directory\n"
               << "  --calibrate          Start directly in calibration mode\n"
               << "  --help               Show this message\n"
               << std::endl;
@@ -55,6 +57,15 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
             options.configPath = AnsiToWide(argv[++i]);
+            continue;
+        }
+
+        if (std::strcmp(arg, "--anim") == 0 || std::strcmp(arg, "--animation") == 0) {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --anim requires a file path." << std::endl;
+                return 1;
+            }
+            options.animationPath = argv[++i];
             continue;
         }
 

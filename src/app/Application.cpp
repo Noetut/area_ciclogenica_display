@@ -4,6 +4,7 @@
 #include <sstream>
 #include <thread>
 
+#include "anim/AnimationParser.h"
 #include "util/StringUtil.h"
 
 namespace {
@@ -113,6 +114,17 @@ bool Application::Initialize(const AppOptions& options) {
     // the "visible" flag per area is persisted, so it is what the config says.
     std::cout << "[Application] Initialization complete! Target: Monitor #"
               << m_targetMonitorIndex << std::endl;
+
+    // Step 5: Wire up animation sequence
+    std::string resolvedAnimPath = AnimationParser::ResolvePath(options.animationPath);
+    std::string animError;
+    if (m_animController.LoadFromFile(resolvedAnimPath, animError)) {
+        std::cout << "[Application] Animation loaded: " << resolvedAnimPath << std::endl;
+    } else if (!options.animationPath.empty()) {
+        std::cerr << "[Application] WARNING: Failed to load animation ("
+                  << options.animationPath << "): " << animError << std::endl;
+    }
+
     PrintControls();
 
     if (options.startInCalibration) {
@@ -126,8 +138,10 @@ bool Application::Initialize(const AppOptions& options) {
 void Application::PrintControls() const {
     std::cout << "---------------------------------------------------------" << std::endl;
     std::cout << "                    SHOW MODE                            " << std::endl;
+    std::cout << "  [Space] Play / Pause animation                         " << std::endl;
+    std::cout << "  [R]     Restart animation                              " << std::endl;
     std::cout << "  [1 - 9] Toggle individual area ON/OFF                  " << std::endl;
-    std::cout << "  [A]     Turn ALL areas ON                             " << std::endl;
+    std::cout << "  [A]     Turn ALL areas ON                              " << std::endl;
     std::cout << "  [O]     Turn ALL areas OFF (clear to black)            " << std::endl;
     std::cout << "  [F1]    Enter CALIBRATION mode                         " << std::endl;
     std::cout << "  [ESC]   Exit application                               " << std::endl;
@@ -165,8 +179,12 @@ void Application::SetMode(AppMode mode) {
     // calibration cannot silently turn hidden areas back on.
     if (m_mode == AppMode::Calibration) {
         m_calibration.OnEnter();
+        m_animController.Pause();
     } else {
         std::cout << "[Application] Back in SHOW mode." << std::endl;
+        if (m_animController.HasSequence()) {
+            m_animController.Play();
+        }
     }
 }
 
@@ -178,6 +196,15 @@ void Application::SetMode(AppMode mode) {
 // ---------------------------------------------------------------------------
 
 void Application::HandleShowModeKey(WPARAM key) {
+    if (key == VK_SPACE) {
+        m_animController.TogglePlayPause();
+        return;
+    }
+
+    if (key == 'R') {
+        m_animController.Restart(m_grid);
+        return;
+    }
 
     if (key >= '1' && key <= '9') {
         int index = static_cast<int>(key - '1');
@@ -254,9 +281,10 @@ void Application::Update(double deltaTime) {
         return;
     }
 
-    // Show mode has no time-driven behaviour: the projection is a static mask
-    // that only changes when a key toggles an area. Timed animation belongs to
-    // the Stage 3 animation modules, not here.
+    // Show mode: advance animation sequence
+    if (m_animController.IsPlaying()) {
+        m_animController.Update(deltaTime, m_grid);
+    }
 }
 
 void Application::RenderCalibrationOverlay() {
