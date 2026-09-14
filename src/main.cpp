@@ -1,59 +1,89 @@
-#include "app/Application.h"
+#include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <string>
-#include <cstdlib>
+
+#include "app/Application.h"
+#include "util/StringUtil.h"
+
+namespace {
+
+void PrintUsage() {
+    std::cout << "Usage: PatronAnimation [monitor] [options]\n"
+              << "\n"
+              << "  monitor              0-indexed monitor (0 = primary, 1 = second). Default: 1\n"
+              << "  --monitor <n>        Same as the positional argument\n"
+              << "  --config <path>      Path to pattern_config.json. Default: auto-resolved\n"
+              << "                       relative to the executable directory\n"
+              << "  --calibrate          Start directly in calibration mode\n"
+              << "  --help               Show this message\n"
+              << std::endl;
+}
+
+bool IsInteger(const char* text) {
+    if (!text || !*text) return false;
+    const char* p = text;
+    if (*p == '-' || *p == '+') ++p;
+    if (!*p) return false;
+    for (; *p; ++p) {
+        if (*p < '0' || *p > '9') return false;
+    }
+    return true;
+}
+
+} // namespace
 
 int main(int argc, char* argv[]) {
-    int targetMonitor = 1;      // Default: 2nd monitor (0-indexed: 0 = 1st, 1 = 2nd)
-    bool enableBlink = false;   // Default: Blinking OFF
-    double blinkInterval = 1.0; // Default interval in seconds
+    AppOptions options;
 
     for (int i = 1; i < argc; ++i) {
-        std::string arg = argv[i];
+        const char* arg = argv[i];
 
-        if (arg == "--display" || arg == "-d") {
-            if (i + 1 < argc) {
-                targetMonitor = std::atoi(argv[++i]);
-            }
-        } else if (arg == "--blink" || arg == "-b") {
-            enableBlink = true;
-            if (i + 1 < argc && argv[i + 1][0] != '-') {
-                try {
-                    blinkInterval = std::stod(argv[++i]);
-                } catch (...) {
-                    blinkInterval = 1.0;
-                }
-            }
-        } else if (arg == "--help" || arg == "-h") {
-            std::cout << "Usage: ./PatronAnimation [options]\n\n"
-                      << "Options:\n"
-                      << "  --display <id>, -d <id>    Target monitor index (0 = 1st, 1 = 2nd, default: 1)\n"
-                      << "  --blink <sec>,  -b <sec>   Enable full blink loop with given interval in seconds\n"
-                      << "                             (e.g., --blink 0.5). If omitted, blinking stays OFF.\n"
-                      << "  --help, -h                 Show this help message\n\n"
-                      << "Examples:\n"
-                      << "  ./PatronAnimation --display 1\n"
-                      << "  ./PatronAnimation --display 1 --blink 0.5\n";
+        if (std::strcmp(arg, "--help") == 0 || std::strcmp(arg, "-h") == 0) {
+            PrintUsage();
             return 0;
-        } else {
-            // Positional fallback (e.g., ./PatronAnimation 1)
-            if (isdigit(static_cast<unsigned char>(arg[0])) || 
-               (arg[0] == '-' && arg.length() > 1 && isdigit(static_cast<unsigned char>(arg[1])))) {
-                targetMonitor = std::atoi(arg.c_str());
-            }
         }
+
+        if (std::strcmp(arg, "--calibrate") == 0) {
+            options.startInCalibration = true;
+            continue;
+        }
+
+        if (std::strcmp(arg, "--config") == 0) {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --config requires a path." << std::endl;
+                return 1;
+            }
+            options.configPath = AnsiToWide(argv[++i]);
+            continue;
+        }
+
+        if (std::strcmp(arg, "--monitor") == 0) {
+            if (i + 1 >= argc || !IsInteger(argv[i + 1])) {
+                std::cerr << "Error: --monitor requires an integer index." << std::endl;
+                return 1;
+            }
+            options.monitorIndex = std::atoi(argv[++i]);
+            continue;
+        }
+
+        // Backwards compatible: a bare integer is the monitor index.
+        if (IsInteger(arg)) {
+            options.monitorIndex = std::atoi(arg);
+            continue;
+        }
+
+        std::cerr << "Error: unrecognised argument '" << arg << "'." << std::endl;
+        PrintUsage();
+        return 1;
     }
 
     std::cout << "============================================" << std::endl;
-    std::cout << "      Patrón Animation Engine v1.0          " << std::endl;
-    std::cout << "============================================" << std::endl;
-    std::cout << "Config: Target Monitor: #" << targetMonitor << " | Blinking: "
-              << (enableBlink ? ("ON (" + std::to_string(blinkInterval) + "s)") : "OFF") << std::endl;
-    std::cout << "Usage: ./PatronAnimation --display <id> [--blink <sec>]" << std::endl;
+    std::cout << "      Patrón Animation Engine v2.0          " << std::endl;
     std::cout << "============================================" << std::endl;
 
     Application app;
-    if (!app.Initialize(targetMonitor, enableBlink, blinkInterval)) {
+    if (!app.Initialize(options)) {
         std::cerr << "Fatal Error: Failed to initialize application." << std::endl;
         return 1;
     }

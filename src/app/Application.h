@@ -1,59 +1,66 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
-#include "../display/DisplayManager.h"
-#include "../render/RenderEngine.h"
-#include "../model/PatternGrid.h"
 #include <chrono>
+#include <string>
+
+#include "calib/CalibrationController.h"
+#include "display/DisplayManager.h"
+#include "model/PatternConfig.h"
+#include "model/PatternGrid.h"
+#include "render/RenderEngine.h"
+
+struct AppOptions {
+    int          monitorIndex = 1;  // 0-indexed; 1 = second monitor
+    std::wstring configPath;        // Empty means "resolve automatically"
+    bool         startInCalibration = false;
+};
+
+enum class AppMode {
+    Show,        // Projection output: areas only, no overlay
+    Calibration  // Interactive geometry editing with on-screen overlay
+};
 
 class Application {
 public:
     Application();
     ~Application();
 
-    // Initialize application targeting display index (default 1 for 2nd monitor) and blink options
-    bool Initialize(int targetMonitorIndex = 1, bool enableBlink = false, double blinkInterval = 1.0);
-
-    // Main application engine loop
+    bool Initialize(const AppOptions& options);
     void Run();
-
-    // Stop and exit application
     void Quit();
 
-    // Square control functions
-    void SetSquareVisible(int id, bool visible);
-    void SetSquareVisible(BoxId id, bool visible);
-    void ToggleSquare(int id);
-    void ToggleSquare(BoxId id);
-    void SetAllSquaresVisible(bool visible);
+    // Area control (by vector index, not by persisted id)
+    void SetAreaVisible(int index, bool visible);
+    void ToggleArea(int index);
+    void SetAllAreasVisible(bool visible);
 
-    // Full blink mode control
-    void SetFullBlinkActive(bool active);
-    bool IsFullBlinkActive() const { return m_isFullBlinkActive; }
-    void SetBlinkInterval(double seconds) { m_blinkInterval = seconds; }
+    AppMode GetMode() const { return m_mode; }
+    void SetMode(AppMode mode);
 
-    // Pattern grid accessor
     PatternGrid& GetGrid() { return m_grid; }
     const PatternGrid& GetGrid() const { return m_grid; }
 
 private:
     void ProcessEvents();
     void HandleKeyDown(WPARAM key);
+    void HandleShowModeKey(WPARAM key);
     void Update(double deltaTime);
     void Render();
+    void RenderCalibrationOverlay();
+    void PrintControls() const;
 
-    DisplayManager m_displayManager;
-    RenderEngine m_renderEngine;
-    PatternGrid m_grid;
+    DisplayManager        m_displayManager;
+    RenderEngine          m_renderEngine;
+    PatternGrid           m_grid;
+    CalibrationController m_calibration;
 
-    bool m_isRunning;
-    int m_targetMonitorIndex;
+    bool    m_isRunning;
+    int     m_targetMonitorIndex;
+    AppMode m_mode;
 
-    // Full blink loop state
-    bool m_isFullBlinkActive;
-    double m_blinkTimer;
-    double m_blinkInterval; // 1.0 second per phase (1s ON, 1s OFF)
-    bool m_allSquaresOn;
+    std::wstring      m_configPath;
+    PatternConfigData m_configData;
 };
 
 #endif // APPLICATION_H

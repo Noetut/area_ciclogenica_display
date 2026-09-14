@@ -1,53 +1,63 @@
 #ifndef PATTERN_GRID_H
 #define PATTERN_GRID_H
 
-#include "PatternBoxes.h"
-#include <vector>
 #include <string>
+#include <vector>
 
+#include "ProjectionArea.h"
+
+// Holds the runtime collection of projection areas.
+//
+// Note on addressing: every method below takes a vector INDEX, not the
+// persisted ProjectionArea::id. The two coincide in a freshly loaded config but
+// diverge as soon as areas are created or deleted during calibration, so the
+// id-based lookups are kept separate and explicit.
 class PatternGrid {
 public:
     PatternGrid();
     ~PatternGrid();
 
-    // Reset all squares to default calibrated states (all visible, default white color)
-    void ResetToDefaults();
+    // --- Bulk state -------------------------------------------------------
+    void Clear();
+    void SetAreas(const std::vector<ProjectionArea>& areas);
 
-    // Turn an individual square ON or OFF by integer ID (0 to 8)
-    void SetSquareVisible(int id, bool visible);
-
-    // Turn an individual square ON or OFF by BoxId enum
-    void SetSquareVisible(BoxId id, bool visible);
-
-    // Toggle an individual square's visibility state
-    void ToggleSquare(int id);
-    void ToggleSquare(BoxId id);
-
-    // Turn ALL squares ON or OFF simultaneously
+    // --- Visibility -------------------------------------------------------
+    void SetAreaVisible(int index, bool visible);
+    void ToggleArea(int index);
     void SetAllVisible(bool visible);
+    bool IsAreaVisible(int index) const;
 
-    // Query visibility of a square
-    bool IsSquareVisible(int id) const;
-    bool IsSquareVisible(BoxId id) const;
-
-    // Set color of an individual square (for future custom patterns/color changes)
-    void SetSquareColor(int id, COLORREF color);
-    void SetSquareColor(BoxId id, COLORREF color);
-
-    // Set color of ALL squares
+    // --- Colour -----------------------------------------------------------
+    void SetAreaColor(int index, COLORREF color);
     void SetAllColor(COLORREF color);
 
-    // Accessors
-    const std::vector<SquareData>& GetSquares() const { return m_squares; }
-    std::vector<SquareData>& GetSquares() { return m_squares; }
-    size_t GetCount() const { return m_squares.size(); }
+    // --- Lifecycle (calibration) ------------------------------------------
+    // Appends a default area centred on the canvas and returns its index.
+    int  CreateArea(int canvasWidth, int canvasHeight);
+    // Appends a copy of an existing area offset by a few pixels; returns the
+    // new index, or -1 if the source index is invalid.
+    int  DuplicateArea(int index);
+    bool RemoveArea(int index);
 
-    // Pointer access by ID (returns nullptr if invalid)
-    SquareData* GetSquare(int id);
-    const SquareData* GetSquare(int id) const;
+    // --- Lookup -----------------------------------------------------------
+    int NextFreeId() const;
+    int FindIndexById(int id) const;
+    int FindIndexByName(const std::string& name) const;
+
+    // --- Accessors --------------------------------------------------------
+    const std::vector<ProjectionArea>& GetAreas() const { return m_areas; }
+    std::vector<ProjectionArea>&       GetAreas()       { return m_areas; }
+    size_t GetCount() const { return m_areas.size(); }
+
+    ProjectionArea*       GetArea(int index);
+    const ProjectionArea* GetArea(int index) const;
 
 private:
-    std::vector<SquareData> m_squares;
+    bool IsValidIndex(int index) const {
+        return index >= 0 && index < static_cast<int>(m_areas.size());
+    }
+
+    std::vector<ProjectionArea> m_areas;
 };
 
 #endif // PATTERN_GRID_H
