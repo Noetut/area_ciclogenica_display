@@ -1,4 +1,5 @@
 #include "DisplayManager.h"
+
 #include <iostream>
 
 DisplayManager::DisplayManager()
@@ -16,7 +17,10 @@ DisplayManager::~DisplayManager() {
     }
 }
 
-BOOL CALLBACK DisplayManager::MonitorEnumProc(HMONITOR hMonitor, HDC hdcMonitor, LPRECT lprcMonitor, LPARAM dwData) {
+// The hdcMonitor and lprcMonitor parameters are required by the
+// EnumDisplayMonitors callback signature but unused here, so they are left
+// unnamed; GetMonitorInfoW supplies the rectangle instead.
+BOOL CALLBACK DisplayManager::MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LPARAM dwData) {
     auto* displays = reinterpret_cast<std::vector<DisplayInfo>*>(dwData);
     MONITORINFOEXW mi;
     mi.cbSize = sizeof(MONITORINFOEXW);
@@ -57,12 +61,8 @@ LRESULT CALLBACK DisplayManager::WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam,
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
-    case WM_KEYDOWN:
-        if (wParam == VK_ESCAPE) {
-            PostQuitMessage(0);
-            return 0;
-        }
-        break;
+    // Key handling lives in Application::HandleKeyDown, which sniffs WM_KEYDOWN
+    // off the queue before dispatch; handling ESC here too would duplicate it.
     case WM_ERASEBKGND:
         return 1; // Prevent GDI flicker
     }
@@ -130,6 +130,11 @@ HWND DisplayManager::CreateWindowOnMonitor(int targetMonitorIndex, const wchar_t
 
     ShowWindow(m_hwnd, SW_SHOW);
     UpdateWindow(m_hwnd);
+
+    // Calibration is keyboard-driven, and this popup competes with the console
+    // window for focus, so claim it explicitly.
+    SetForegroundWindow(m_hwnd);
+    SetFocus(m_hwnd);
 
     return m_hwnd;
 }

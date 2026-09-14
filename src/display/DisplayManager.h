@@ -2,9 +2,9 @@
 #define DISPLAY_MANAGER_H
 
 #include <windows.h>
-#include <vector>
+
 #include <string>
-#include <iostream>
+#include <vector>
 
 struct DisplayInfo {
     int index;

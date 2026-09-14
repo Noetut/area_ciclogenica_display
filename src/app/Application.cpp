@@ -1,83 +1,237 @@
 #include "Application.h"
+
 #include <iostream>
+#include <sstream>
 #include <thread>
+
+#include "anim/AnimationParser.h"
+#include "util/StringUtil.h"
+
+namespace {
+
+// --- Frame pacing ---------------------------------------------------------
+const double kTargetFPS = 60.0;
+
+// --- Calibration overlay palette ------------------------------------------
+// Deliberately dim for the unselected areas: calibration happens with the
+// projector live, pointed at a physical scene.
+const COLORREF kDimOutline      = RGB(70, 70, 70);
+const COLORREF kSelectedOutline = RGB(0, 180, 255);
+const COLORREF kHandleFill      = RGB(255, 200, 0);
+const COLORREF kHandleBorder    = RGB(0, 0, 0);
+const COLORREF kActiveHandle    = RGB(255, 40, 40);
+const COLORREF kCenterCross     = RGB(0, 180, 255);
+const COLORREF kHudText         = RGB(220, 220, 220);
+const COLORREF kLabelText       = RGB(140, 140, 140);
+
+// --- Transparency levels (0 = invisible, 255 = solid) ---------------------
+const BYTE kHudBgAlpha          = 120;  // Semi-transparent HUD box (~47% opacity, squares show through)
+const BYTE kHudTextAlpha        = 180;  // Semi-transparent HUD text (~70% opacity)
+const BYTE kLabelBgAlpha        = 100;  // Semi-transparent area label backing box (~39% opacity)
+const BYTE kLabelTextAlpha      = 180;  // Semi-transparent area label text (~70% opacity)
+
+// --- Calibration overlay layout (pixels) ----------------------------------
+const int kHandleHalfSize        = 4;
+const int kActiveHandleHalfSize  = 7;
+const int kOutlineThickness      = 1;
+const int kSelectedOutlineWidth  = 3;
+const int kCenterCrossArm        = 12;
+const int kAreaLabelInset        = 4;  // From the area's top-left corner
+const int kHudOriginX            = 20;
+const int kHudOriginY            = 20;
+
+} // namespace
 
 Application::Application()
     : m_isRunning(false)
     , m_targetMonitorIndex(1)
-    , m_isFullBlinkActive(true)
-    , m_blinkTimer(0.0)
-    , m_blinkInterval(1.0)
-    , m_allSquaresOn(true)
+    , m_mode(AppMode::Show)
 {
 }
 
 Application::~Application() {
 }
 
-bool Application::Initialize(int targetMonitorIndex) {
-    m_targetMonitorIndex = targetMonitorIndex;
+// ---------------------------------------------------------------------------
+// Start-up
+// ---------------------------------------------------------------------------
+
+bool Application::Initialize(const AppOptions& options) {
+    m_targetMonitorIndex = options.monitorIndex;
 
     std::cout << "[Application] Initializing Patron Animation App..." << std::endl;
 
-    // Step 1: Create full-screen window on target monitor (Monitor 2 / index 1)
-    HWND hwnd = m_displayManager.CreateWindowOnMonitor(m_targetMonitorIndex, L"Patrón Animation - Grid Display");
+    // Step 1: Load the projection geometry. config/pattern_config.json is the
+    // only source of truth; nothing is compiled into the binary.
+    m_configPath = PatternConfig::ResolvePath(options.configPath);
+    std::cout << "[Application] Config path: " << WideToUtf8(m_configPath) << std::endl;
+
+    std::string configError;
+    if (PatternConfig::Load(m_configPath, m_configData, configError)) {
+        std::cout << "[Application] Loaded " << m_configData.areas.size()
+                  << " projection area(s) from config." << std::endl;
+    } else {
+        std::cerr << "[Application] WARNING: could not load config (" << configError << ")."
+                  << std::endl;
+        std::cerr << "[Application] Starting with an EMPTY grid. Enter calibration mode "
+                     "with [F1] and press [N] to create areas." << std::endl;
+        m_configData = PatternConfigData();
+    }
+    m_grid.SetAreas(m_configData.areas);
+
+    // Step 2: Create full-screen window on the target monitor
+    HWND hwnd = m_displayManager.CreateWindowOnMonitor(m_targetMonitorIndex,
+                                                       L"Patrón Animation - Grid Display");
     if (!hwnd) {
         std::cerr << "[Application] ERROR: DisplayManager failed to create window." << std::endl;
         return false;
     }
 
-    // Step 2: Initialize double-buffered GDI rendering engine
+    // Step 3: Initialize double-buffered GDI rendering engine
     if (!m_renderEngine.Initialize(hwnd, m_displayManager.GetWidth(), m_displayManager.GetHeight())) {
         std::cerr << "[Application] ERROR: RenderEngine failed to initialize." << std::endl;
         return false;
     }
 
-    // Step 3: Initialize pattern grid with all squares ON initially
-    m_grid.ResetToDefaults();
-    m_allSquaresOn = true;
-    m_grid.SetAllVisible(m_allSquaresOn);
+    // The stored coordinates are absolute pixels, so a monitor that does not
+    // match the calibration canvas will show the pattern displaced.
+    if (m_displayManager.GetWidth()  != m_configData.canvasWidth ||
+        m_displayManager.GetHeight() != m_configData.canvasHeight) {
+        std::cerr << "[Application] WARNING: monitor is "
+                  << m_displayManager.GetWidth() << "x" << m_displayManager.GetHeight()
+                  << " but the config canvas is "
+                  << m_configData.canvasWidth << "x" << m_configData.canvasHeight
+                  << ". Areas will not line up; recalibrate for this display." << std::endl;
+    }
 
-    std::cout << "[Application] Initialization complete! Target: Monitor #" << m_targetMonitorIndex << std::endl;
-    std::cout << "[Application] Total pattern squares loaded: " << m_grid.GetCount() << std::endl;
-    std::cout << "---------------------------------------------------------" << std::endl;
-    std::cout << "                      CONTROLS                           " << std::endl;
-    std::cout << "  [SPACE] Toggle 1-second Full Blink loop (Pause / Resume)" << std::endl;
-    std::cout << "  [1 - 9] Toggle individual square ON/OFF                  " << std::endl;
-    std::cout << "  [A]     Turn ALL squares ON                             " << std::endl;
-    std::cout << "  [C]     Turn ALL squares OFF (Clear to black)           " << std::endl;
-    std::cout << "  [ESC]   Exit application                                " << std::endl;
-    std::cout << "---------------------------------------------------------" << std::endl;
-    std::cout << "[Application] Starting in FULL BLINK mode (1s interval)..." << std::endl;
+    // Step 4: Wire up calibration
+    m_calibration.Attach(&m_grid, m_configPath,
+                         m_configData.canvasWidth, m_configData.canvasHeight,
+                         m_configData.referenceImage);
+    m_calibration.SetSavedSnapshot(m_configData.areas);
+
+    // Initial visibility comes from the config rather than being forced on:
+    // the "visible" flag per area is persisted, so it is what the config says.
+    std::cout << "[Application] Initialization complete! Target: Monitor #"
+              << m_targetMonitorIndex << std::endl;
+
+    // Step 5: Wire up animation sequence
+    std::string resolvedAnimPath = AnimationParser::ResolvePath(options.animationPath);
+    std::string animError;
+    if (m_animController.LoadFromFile(resolvedAnimPath, animError)) {
+        std::cout << "[Application] Animation loaded: " << resolvedAnimPath << std::endl;
+    } else if (!options.animationPath.empty()) {
+        std::cerr << "[Application] WARNING: Failed to load animation ("
+                  << options.animationPath << "): " << animError << std::endl;
+    }
+
+    PrintControls();
+
+    if (options.startInCalibration) {
+        SetMode(AppMode::Calibration);
+    }
 
     m_isRunning = true;
     return true;
 }
 
-void Application::SetSquareVisible(int id, bool visible) {
-    m_grid.SetSquareVisible(id, visible);
+void Application::PrintControls() const {
+    std::cout << "---------------------------------------------------------" << std::endl;
+    std::cout << "                    SHOW MODE                            " << std::endl;
+    std::cout << "  [Space] Play / Pause animation                         " << std::endl;
+    std::cout << "  [R]     Restart animation                              " << std::endl;
+    std::cout << "  [1 - 9] Toggle individual area ON/OFF                  " << std::endl;
+    std::cout << "  [A]     Turn ALL areas ON                              " << std::endl;
+    std::cout << "  [O]     Turn ALL areas OFF (clear to black)            " << std::endl;
+    std::cout << "  [F1]    Enter CALIBRATION mode                         " << std::endl;
+    std::cout << "  [ESC]   Exit application                               " << std::endl;
+    std::cout << "---------------------------------------------------------" << std::endl;
 }
 
-void Application::SetSquareVisible(BoxId id, bool visible) {
-    m_grid.SetSquareVisible(id, visible);
+// ---------------------------------------------------------------------------
+// Area visibility and mode switching
+// ---------------------------------------------------------------------------
+
+void Application::SetAreaVisible(int index, bool visible) {
+    m_grid.SetAreaVisible(index, visible);
 }
 
-void Application::ToggleSquare(int id) {
-    m_grid.ToggleSquare(id);
+void Application::ToggleArea(int index) {
+    m_grid.ToggleArea(index);
 }
 
-void Application::ToggleSquare(BoxId id) {
-    m_grid.ToggleSquare(id);
-}
-
-void Application::SetAllSquaresVisible(bool visible) {
+void Application::SetAllAreasVisible(bool visible) {
     m_grid.SetAllVisible(visible);
-    m_allSquaresOn = visible;
 }
 
-void Application::SetFullBlinkActive(bool active) {
-    m_isFullBlinkActive = active;
-    m_blinkTimer = 0.0;
+void Application::SetMode(AppMode mode) {
+    if (m_mode == mode) return;
+
+    if (m_mode == AppMode::Calibration) {
+        m_calibration.OnExit();
+    }
+
+    m_mode = mode;
+
+    // Visibility is deliberately left alone in both directions. The overlay
+    // draws every area regardless of its "visible" flag, so there is no need to
+    // light them up for editing, and not touching the flags means a save from
+    // calibration cannot silently turn hidden areas back on.
+    if (m_mode == AppMode::Calibration) {
+        m_calibration.OnEnter();
+        m_animController.Pause();
+    } else {
+        std::cout << "[Application] Back in SHOW mode." << std::endl;
+        if (m_animController.HasSequence()) {
+            m_animController.Play();
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Input
+//
+// Calibration keys are handled by CalibrationController; only show-mode keys
+// and the mode/quit keys live here.
+// ---------------------------------------------------------------------------
+
+void Application::HandleShowModeKey(WPARAM key) {
+    if (key == VK_SPACE) {
+        m_animController.TogglePlayPause();
+        return;
+    }
+
+    if (key == 'R') {
+        m_animController.Restart(m_grid);
+        return;
+    }
+
+    if (key >= '1' && key <= '9') {
+        int index = static_cast<int>(key - '1');
+        if (index >= static_cast<int>(m_grid.GetCount())) {
+            std::cout << "[Application] No area at index " << index << "." << std::endl;
+            return;
+        }
+        m_grid.ToggleArea(index);
+        const auto* area = m_grid.GetArea(index);
+        if (area) {
+            std::cout << "[Application] Area #" << index << " [" << area->name << "] toggled -> "
+                      << (area->isVisible ? "ON" : "OFF") << std::endl;
+        }
+        return;
+    }
+
+    if (key == 'A') {
+        SetAllAreasVisible(true);
+        std::cout << "[Application] All areas turned ON." << std::endl;
+        return;
+    }
+
+    if (key == 'O') {
+        SetAllAreasVisible(false);
+        std::cout << "[Application] All areas turned OFF (Clear)." << std::endl;
+        return;
+    }
 }
 
 void Application::HandleKeyDown(WPARAM key) {
@@ -86,36 +240,20 @@ void Application::HandleKeyDown(WPARAM key) {
         return;
     }
 
-    if (key == VK_SPACE) {
-        m_isFullBlinkActive = !m_isFullBlinkActive;
-        m_blinkTimer = 0.0;
-        std::cout << "[Application] Full Blink Loop: " 
-                  << (m_isFullBlinkActive ? "RESUMED (1s interval)" : "PAUSED") << std::endl;
+    if (key == VK_F1) {
+        SetMode(m_mode == AppMode::Show ? AppMode::Calibration : AppMode::Show);
         return;
     }
 
-    if (key >= '1' && key <= '9') {
-        int id = static_cast<int>(key - '1');
-        m_grid.ToggleSquare(id);
-        const auto* sq = m_grid.GetSquare(id);
-        if (sq) {
-            std::cout << "[Application] Square #" << id << " [" << sq->name << "] toggled -> " 
-                      << (sq->isVisible ? "ON" : "OFF") << std::endl;
-        }
+    const bool shift = (GetKeyState(VK_SHIFT)   & 0x8000) != 0;
+    const bool ctrl  = (GetKeyState(VK_CONTROL) & 0x8000) != 0;
+
+    if (m_mode == AppMode::Calibration) {
+        m_calibration.HandleKey(key, shift, ctrl);
         return;
     }
 
-    if (key == 'A' || key == 'a') {
-        SetAllSquaresVisible(true);
-        std::cout << "[Application] All squares turned ON." << std::endl;
-        return;
-    }
-
-    if (key == 'C' || key == 'c') {
-        SetAllSquaresVisible(false);
-        std::cout << "[Application] All squares turned OFF (Clear)." << std::endl;
-        return;
-    }
+    HandleShowModeKey(key);
 }
 
 void Application::ProcessEvents() {
@@ -123,7 +261,9 @@ void Application::ProcessEvents() {
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
         if (msg.message == WM_QUIT) {
             m_isRunning = false;
-        } else if (msg.message == WM_KEYDOWN) {
+        } else if (msg.message == WM_KEYDOWN && msg.hwnd == m_displayManager.GetHWND()) {
+            // Filtered by window: the thread queue can carry messages that are
+            // not meant for the projection window.
             HandleKeyDown(msg.wParam);
         }
         TranslateMessage(&msg);
@@ -131,24 +271,87 @@ void Application::ProcessEvents() {
     }
 }
 
-void Application::Update(double deltaTime) {
-    // 1-second full blink loop: alternate all squares between ON and OFF every 1.0s
-    if (m_isFullBlinkActive) {
-        m_blinkTimer += deltaTime;
-        if (m_blinkTimer >= m_blinkInterval) {
-            m_blinkTimer -= m_blinkInterval;
-            m_allSquaresOn = !m_allSquaresOn;
-            m_grid.SetAllVisible(m_allSquaresOn);
+// ---------------------------------------------------------------------------
+// Frame loop: Update -> Render -> Run
+// ---------------------------------------------------------------------------
 
-            std::cout << "[Application] Full Blink: All squares -> " 
-                      << (m_allSquaresOn ? "ON (White)" : "OFF (Black)") << std::endl;
+void Application::Update(double deltaTime) {
+    if (m_mode == AppMode::Calibration) {
+        m_calibration.Update(deltaTime);
+        return;
+    }
+
+    // Show mode: advance animation sequence
+    if (m_animController.IsPlaying()) {
+        m_animController.Update(deltaTime, m_grid);
+    }
+}
+
+void Application::RenderCalibrationOverlay() {
+    m_renderEngine.RenderBlack();
+
+    const auto& areas = m_grid.GetAreas();
+    const int selected = m_calibration.SelectedIndex();
+    const int corner = m_calibration.SelectedCorner();
+
+    for (size_t i = 0; i < areas.size(); ++i) {
+        const auto& area = areas[i];
+        const bool isSelected = (static_cast<int>(i) == selected);
+
+        if (isSelected) {
+            m_renderEngine.FillQuadHalftone(area.quad, area.color);
         }
+        m_renderEngine.DrawQuadOutline(area.quad,
+                                       isSelected ? kSelectedOutline : kDimOutline,
+                                       isSelected ? kSelectedOutlineWidth : kOutlineThickness);
+
+        // Index label, so the operator knows which digit selects this area.
+        std::wostringstream label;
+        label << L"[" << (i + 1) << L"] " << Utf8ToWide(area.name);
+        m_renderEngine.DrawHudText(area.quad.corners[0].x + kAreaLabelInset,
+                                   area.quad.corners[0].y + kAreaLabelInset,
+                                   label.str(),
+                                   isSelected ? kSelectedOutline : kLabelText,
+                                   kLabelBgAlpha, kLabelTextAlpha);
+
+        if (!isSelected) continue;
+
+        Point2i center = { static_cast<int>(area.quad.CenterX()),
+                           static_cast<int>(area.quad.CenterY()) };
+        m_renderEngine.DrawCross(center, kCenterCrossArm, kCenterCross);
+
+        for (int c = 0; c < 4; ++c) {
+            const bool isActiveCorner = (c == corner);
+            if (isActiveCorner) {
+                // Blinking makes the active corner unmistakable from across
+                // the room, where colour alone is easy to miss.
+                if (m_calibration.HandleBlinkOn()) {
+                    m_renderEngine.DrawHandle(area.quad.corners[c], kActiveHandleHalfSize,
+                                              kActiveHandle, kHandleBorder);
+                }
+            } else {
+                m_renderEngine.DrawHandle(area.quad.corners[c], kHandleHalfSize,
+                                          kHandleFill, kHandleBorder);
+            }
+        }
+    }
+
+    if (m_calibration.ShowHud()) {
+        m_renderEngine.DrawHudText(kHudOriginX, kHudOriginY,
+                                   m_calibration.BuildHudText(), kHudText,
+                                   kHudBgAlpha, kHudTextAlpha);
     }
 }
 
 void Application::Render() {
     m_renderEngine.BeginFrame();
-    m_renderEngine.RenderSquares(m_grid.GetSquares());
+
+    if (m_mode == AppMode::Calibration) {
+        RenderCalibrationOverlay();
+    } else {
+        m_renderEngine.RenderAreas(m_grid.GetAreas());
+    }
+
     m_renderEngine.EndFrame();
 }
 
@@ -156,8 +359,7 @@ void Application::Run() {
     using clock = std::chrono::high_resolution_clock;
     auto previousTime = clock::now();
 
-    const double targetFPS = 60.0;
-    const std::chrono::duration<double> targetFrameDuration(1.0 / targetFPS);
+    const std::chrono::duration<double> targetFrameDuration(1.0 / kTargetFPS);
 
     while (m_isRunning) {
         auto currentTime = clock::now();
@@ -176,6 +378,10 @@ void Application::Run() {
         if (frameDuration < targetFrameDuration) {
             std::this_thread::sleep_for(targetFrameDuration - frameDuration);
         }
+    }
+
+    if (m_mode == AppMode::Calibration && m_calibration.IsDirty()) {
+        std::cerr << "[Application] WARNING: exited with UNSAVED calibration changes." << std::endl;
     }
 
     std::cout << "[Application] Exiting cleanly." << std::endl;

@@ -1,0 +1,33 @@
+# ==============================================================================
+# Animation: Sequential Wave (Turn Off 1..10, then Turn On 1..10)
+# ==============================================================================
+name: Sequential Wave
+loop: true
+default_step: 300ms
+
+# Step 1: Start with all areas lit
+300ms ALL_ON
+
+# Step 2: Turn off one by one from area 1 to area 10
+100ms OFF 1
+100ms OFF 2
+100ms OFF 3
+100ms OFF 4
+100ms OFF 5
+100ms OFF 6
+100ms OFF 7
+100ms OFF 8
+100ms OFF 9
+100ms OFF 10
+
+# Step 3: Turn on one by one from area 1 to area 10
+100ms ON 1
+100ms ON 2
+100ms ON 3
+100ms ON 4
+100ms ON 5
+100ms ON 6
+100ms ON 7
+100ms ON 8
+100ms ON 9
+100ms ON 10
