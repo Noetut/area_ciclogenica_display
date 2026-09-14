@@ -54,6 +54,7 @@ private:
     void Render();
     void RenderCalibrationOverlay();
     void PrintControls() const;
+    void CycleAnimation();
 
     DisplayManager        m_displayManager;
     RenderEngine          m_renderEngine;

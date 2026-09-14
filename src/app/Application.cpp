@@ -1,8 +1,10 @@
 #include "Application.h"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include "anim/AnimationParser.h"
 #include "util/StringUtil.h"
@@ -140,6 +142,7 @@ void Application::PrintControls() const {
     std::cout << "                    SHOW MODE                            " << std::endl;
     std::cout << "  [Space] Play / Pause animation                         " << std::endl;
     std::cout << "  [R]     Restart animation                              " << std::endl;
+    std::cout << "  [Tab]   Switch to next animation script                " << std::endl;
     std::cout << "  [1 - 9] Toggle individual area ON/OFF                  " << std::endl;
     std::cout << "  [A]     Turn ALL areas ON                              " << std::endl;
     std::cout << "  [O]     Turn ALL areas OFF (clear to black)            " << std::endl;
@@ -203,6 +206,11 @@ void Application::HandleShowModeKey(WPARAM key) {
 
     if (key == 'R') {
         m_animController.Restart(m_grid);
+        return;
+    }
+
+    if (key == VK_TAB) {
+        CycleAnimation();
         return;
     }
 
@@ -389,4 +397,66 @@ void Application::Run() {
 
 void Application::Quit() {
     m_isRunning = false;
+}
+
+void Application::CycleAnimation() {
+    std::vector<std::string> animFiles;
+    const char* searchDirs[] = { "animations", "../animations" };
+
+    for (const char* dir : searchDirs) {
+        std::wstring searchPattern = AnsiToWide(std::string(dir) + "/*.txt");
+        WIN32_FIND_DATAW findData;
+        HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &findData);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    std::string fileName = WideToUtf8(findData.cFileName);
+                    std::string fullPath = std::string(dir) + "/" + fileName;
+
+                    bool exists = false;
+                    for (const auto& existing : animFiles) {
+                        if (existing.find(fileName) != std::string::npos) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        animFiles.push_back(fullPath);
+                    }
+                }
+            } while (FindNextFileW(hFind, &findData));
+            FindClose(hFind);
+        }
+    }
+
+    if (animFiles.empty()) {
+        std::cout << "[Application] No animation files found in animations/ directory." << std::endl;
+        return;
+    }
+
+    // Sort for deterministic cycling order
+    std::sort(animFiles.begin(), animFiles.end());
+
+    size_t currentIndex = 0;
+    const std::string& currentPath = m_animController.FilePath();
+    for (size_t i = 0; i < animFiles.size(); ++i) {
+        if (!currentPath.empty() && (animFiles[i] == currentPath ||
+            currentPath.find(animFiles[i]) != std::string::npos ||
+            animFiles[i].find(currentPath) != std::string::npos)) {
+            currentIndex = i;
+            break;
+        }
+    }
+
+    size_t nextIndex = (currentIndex + 1) % animFiles.size();
+    std::string nextPath = animFiles[nextIndex];
+
+    std::string err;
+    if (m_animController.LoadFromFile(nextPath, err)) {
+        m_animController.Restart(m_grid);
+        std::cout << "[Application] Switched to animation: " << nextPath
+                  << " ('" << m_animController.SequenceName() << "')" << std::endl;
+    } else {
+        std::cerr << "[Application] Failed to load " << nextPath << ": " << err << std::endl;
+    }
 }

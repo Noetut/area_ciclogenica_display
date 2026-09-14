@@ -1,0 +1,167 @@
+# ==============================================================================
+# Animation: Strobe & Spatial Light Show
+# Designed for 10-zone physical mapping:
+#   - Left Column (Vinyls): 1 (top), 2 (mid), 3 (bottom)
+#   - Center Upper Row:     4 (left), 5 (mid), 6 (right)
+#   - Center Lower Row:     7 (left), 8 (mid), 9 (right)
+#   - Right Edge (Scarf):   10 (tall vertical stripe)
+# ==============================================================================
+name: Strobe & Spatial Light Show
+loop: true
+default_step: 80ms
+
+# ------------------------------------------------------------------------------
+# INTRO: Awakening / Staccato pulses on Vinyl stack
+# ------------------------------------------------------------------------------
+200ms ALL_OFF
+70ms  ON 1
+70ms  OFF 1
+70ms  ON 2
+70ms  OFF 2
+70ms  ON 3
+70ms  OFF 3
+100ms ALL_OFF
+
+# Quick double-flash of left column
+50ms  ON 1 & ON 2 & ON 3
+50ms  ALL_OFF
+50ms  ON 1 & ON 2 & ON 3
+100ms ALL_OFF
+
+# Scarf response on the far right
+60ms  ON 10
+60ms  ALL_OFF
+60ms  ON 10
+120ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 1: Spatial Lateral Sweep (Left to Right, then Right to Left)
+# ------------------------------------------------------------------------------
+# Col 1: Left Vinyls
+80ms  ON 1 & ON 2 & ON 3
+# Col 2: Left Frames
+80ms  OFF 1 & OFF 2 & OFF 3 & ON 4 & ON 7
+# Col 3: Center Frames
+80ms  OFF 4 & OFF 7 & ON 5 & ON 8
+# Col 4: Right Frames
+80ms  OFF 5 & OFF 8 & ON 6 & ON 9
+# Col 5: Scarf (Far Right)
+90ms  OFF 6 & OFF 9 & ON 10
+
+# Echo back (Right to Left)
+70ms  OFF 10 & ON 6 & ON 9
+70ms  OFF 6 & OFF 9 & ON 5 & ON 8
+70ms  OFF 5 & OFF 8 & ON 4 & ON 7
+70ms  OFF 4 & OFF 7 & ON 1 & ON 2 & ON 3
+100ms ALL_OFF
+
+# Rapid second pass (Double Speed)
+50ms  ON 1 & ON 2 & ON 3
+50ms  OFF 1 & OFF 2 & OFF 3 & ON 4 & ON 7
+50ms  OFF 4 & OFF 7 & ON 5 & ON 8
+50ms  OFF 5 & OFF 8 & ON 6 & ON 9
+50ms  OFF 6 & OFF 9 & ON 10
+50ms  OFF 10 & ON 6 & ON 9
+50ms  OFF 6 & OFF 9 & ON 5 & ON 8
+50ms  OFF 5 & OFF 8 & ON 4 & ON 7
+50ms  OFF 4 & OFF 7 & ON 1 & ON 2 & ON 3
+100ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 2: Perimeter Spiral Whirlwind (Clockwise perimeter chase)
+# Order: 1 -> 4 -> 5 -> 6 -> 10 -> 9 -> 8 -> 7 -> 3 -> 2 -> repeat
+# ------------------------------------------------------------------------------
+60ms  ON 1
+60ms  OFF 1 & ON 4
+60ms  OFF 4 & ON 5
+60ms  OFF 5 & ON 6
+60ms  OFF 6 & ON 10
+60ms  OFF 10 & ON 9
+60ms  OFF 9 & ON 8
+60ms  OFF 8 & ON 7
+60ms  OFF 7 & ON 3
+60ms  OFF 3 & ON 2
+
+# Round 2: 2-step comet trail (faster)
+45ms  ON 1
+45ms  ON 4 & OFF 2
+45ms  ON 5 & OFF 1
+45ms  ON 6 & OFF 4
+45ms  ON 10 & OFF 5
+45ms  ON 9 & OFF 6
+45ms  ON 8 & OFF 10
+45ms  ON 7 & OFF 9
+45ms  ON 3 & OFF 8
+45ms  ON 2 & OFF 7
+45ms  ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 3: Center Expansion & Dual Wings
+# ------------------------------------------------------------------------------
+# Center nucleus ignition
+80ms  ON 5 & ON 8
+50ms  ALL_OFF
+80ms  ON 5 & ON 8
+# Expand to surrounding center frames
+70ms  ON 4 & ON 7 & ON 6 & ON 9
+# Expand to outer pillars (Vinyls + Scarf)
+80ms  ON 1 & ON 2 & ON 3 & ON 10
+# Full constellation lit
+150ms ALL_ON
+100ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 4: Upper Row vs Lower Row Alternating Stabs
+# Upper: 1, 4, 5, 6
+# Lower: 3, 7, 8, 9
+# ------------------------------------------------------------------------------
+60ms  ON 1 & ON 4 & ON 5 & ON 6
+60ms  ALL_OFF
+60ms  ON 3 & ON 7 & ON 8 & ON 9
+60ms  ALL_OFF
+50ms  ON 1 & ON 4 & ON 5 & ON 6
+50ms  ALL_OFF
+50ms  ON 3 & ON 7 & ON 8 & ON 9
+50ms  ALL_OFF
+
+# Rapid ping-pong alternation (no blackout between)
+45ms  ON 1 & ON 4 & ON 5 & ON 6 & OFF 3 & OFF 7 & OFF 8 & OFF 9
+45ms  OFF 1 & OFF 4 & OFF 5 & OFF 6 & ON 3 & ON 7 & ON 8 & ON 9
+45ms  ON 1 & ON 4 & ON 5 & ON 6 & OFF 3 & OFF 7 & OFF 8 & OFF 9
+45ms  OFF 1 & OFF 4 & OFF 5 & OFF 6 & ON 3 & ON 7 & ON 8 & ON 9
+80ms  ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 5: Checkerboard Strobe Rhythm
+# Evens (2, 4, 6, 8, 10) vs Odds (1, 3, 5, 7, 9)
+# ------------------------------------------------------------------------------
+60ms  ON 1 & ON 3 & ON 5 & ON 7 & ON 9
+60ms  OFF 1 & OFF 3 & OFF 5 & OFF 7 & OFF 9 & ON 2 & ON 4 & ON 6 & ON 8 & ON 10
+60ms  ON 1 & ON 3 & ON 5 & ON 7 & ON 9 & OFF 2 & OFF 4 & OFF 6 & OFF 8 & OFF 10
+60ms  OFF 1 & OFF 3 & OFF 5 & OFF 7 & OFF 9 & ON 2 & ON 4 & ON 6 & ON 8 & ON 10
+50ms  ON 1 & ON 3 & ON 5 & ON 7 & ON 9 & OFF 2 & OFF 4 & OFF 6 & OFF 8 & OFF 10
+50ms  OFF 1 & OFF 3 & OFF 5 & OFF 7 & OFF 9 & ON 2 & ON 4 & ON 6 & ON 8 & ON 10
+100ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# FINALE: Heavy Strobe Crescendo -> Grand Flash -> Blackout Pause
+# ------------------------------------------------------------------------------
+60ms  ALL_ON
+60ms  ALL_OFF
+50ms  ALL_ON
+50ms  ALL_OFF
+40ms  ALL_ON
+40ms  ALL_OFF
+40ms  ALL_ON
+40ms  ALL_OFF
+35ms  ALL_ON
+35ms  ALL_OFF
+
+# Triple heavy impacts
+150ms ALL_ON
+100ms ALL_OFF
+150ms ALL_ON
+100ms ALL_OFF
+300ms ALL_ON
+# Dramatic silence / tension before loop restarts
+500ms ALL_OFF

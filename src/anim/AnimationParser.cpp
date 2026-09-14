@@ -107,8 +107,11 @@ std::wstring GetExecutableDir() {
 std::string AnimationParser::ResolvePath(const std::string& inputPath) {
     if (inputPath.empty()) {
         const char* defaults[] = {
+            "animations/strobe_show.txt",
             "animations/sequential_wave.txt",
+            "../animations/strobe_show.txt",
             "../animations/sequential_wave.txt",
+            "../../animations/strobe_show.txt",
             "../../animations/sequential_wave.txt"
         };
         for (const char* candidate : defaults) {
@@ -117,12 +120,14 @@ std::string AnimationParser::ResolvePath(const std::string& inputPath) {
         }
 
         std::wstring exeDir = GetExecutableDir();
-        std::wstring cand1 = exeDir + L"\\animations\\sequential_wave.txt";
+        std::wstring cand1 = exeDir + L"\\animations\\strobe_show.txt";
         if (FileExists(cand1)) return WideToUtf8(cand1);
-        std::wstring cand2 = exeDir + L"\\..\\animations\\sequential_wave.txt";
+        std::wstring cand2 = exeDir + L"\\animations\\sequential_wave.txt";
         if (FileExists(cand2)) return WideToUtf8(cand2);
+        std::wstring cand3 = exeDir + L"\\..\\animations\\strobe_show.txt";
+        if (FileExists(cand3)) return WideToUtf8(cand3);
 
-        return "animations/sequential_wave.txt";
+        return "animations/strobe_show.txt";
     }
 
     std::wstring direct = AnsiToWide(inputPath);

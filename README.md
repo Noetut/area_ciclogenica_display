@@ -38,6 +38,7 @@ Projects calibrated geometric areas and plays text-based animation sequences at 
 |:---|:---|
 | <kbd>Space</kbd> | Play / Pause animation |
 | <kbd>R</kbd> | Restart animation from frame 1 |
+| <kbd>Tab</kbd> | Switch to next animation script |
 | <kbd>1</kbd> – <kbd>9</kbd> | Toggle individual area ON / OFF |
 | <kbd>A</kbd> / <kbd>O</kbd> | Turn **ALL** areas ON / OFF |
 | <kbd>F1</kbd> | Enter **Calibration Mode** |
