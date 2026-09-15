@@ -124,7 +124,7 @@ bool Application::Initialize(const AppOptions& options) {
     std::string animError;
     if (m_animController.LoadFromFile(resolvedAnimPath, animError)) {
         std::cout << "[Application] Animation loaded: " << resolvedAnimPath << std::endl;
-        m_animController.PreloadImages(m_renderEngine);
+        m_animController.PreloadMedia(m_renderEngine);
     } else if (!options.animationPath.empty()) {
         std::cerr << "[Application] WARNING: Failed to load animation ("
                   << options.animationPath << "): " << animError << std::endl;
@@ -176,6 +176,7 @@ void Application::SetMode(AppMode mode) {
 
     if (m_mode == AppMode::Calibration) {
         m_calibration.OnExit();
+        m_renderEngine.ClearQuadCache();
     }
 
     m_mode = mode;
@@ -398,7 +399,11 @@ void Application::Run() {
     using clock = std::chrono::high_resolution_clock;
     auto previousTime = clock::now();
 
-    const std::chrono::duration<double> targetFrameDuration(1.0 / kTargetFPS);
+    double targetFPS = static_cast<double>(m_displayManager.GetRefreshRate());
+    if (targetFPS < 30.0 || targetFPS > 360.0) targetFPS = 60.0;
+    const std::chrono::duration<double> targetFrameDuration(1.0 / targetFPS);
+
+    std::cout << "[Application] Running main loop locked to " << targetFPS << " FPS" << std::endl;
 
     while (m_isRunning) {
         auto currentTime = clock::now();
@@ -406,6 +411,8 @@ void Application::Run() {
         previousTime = currentTime;
 
         double deltaTime = elapsedTime.count();
+        if (deltaTime > 0.1) deltaTime = 0.1;
+        if (deltaTime < 0.0) deltaTime = 0.0;
 
         ProcessEvents();
         Update(deltaTime);
@@ -492,7 +499,7 @@ void Application::CycleAnimation() {
 
     std::string err;
     if (m_animController.LoadFromFile(nextPath, err)) {
-        m_animController.PreloadImages(m_renderEngine);
+        m_animController.PreloadMedia(m_renderEngine);
         m_animController.Restart(m_grid);
         std::cout << "[Application] Switched to animation: " << nextPath
                   << " ('" << m_animController.SequenceName() << "')" << std::endl;

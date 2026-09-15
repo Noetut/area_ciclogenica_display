@@ -12,6 +12,7 @@ struct DisplayInfo {
     RECT rect; // Screen coordinates (left, top, right, bottom)
     int width;
     int height;
+    int refreshRate; // Display refresh rate in Hz
     bool isPrimary;
 };
 
@@ -35,6 +36,7 @@ public:
     // Get dimensions of current window
     int GetWidth() const { return m_width; }
     int GetHeight() const { return m_height; }
+    int GetRefreshRate() const { return m_refreshRate; }
 
 private:
     static LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -45,6 +47,7 @@ private:
     HINSTANCE m_hInstance;
     int m_width;
     int m_height;
+    int m_refreshRate;
 };
 
 #endif // DISPLAY_MANAGER_H

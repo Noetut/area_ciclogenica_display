@@ -38,9 +38,13 @@ struct AnimationAction {
     COLORREF    textColor = RGB(255, 255, 255); // Color of text glyphs
     std::vector<bool> mask;         // Used for SetMask
     std::vector<int> targetIds;     // Multiple target IDs for bulk commands like Palpitate
-    float       minBrightness = 0.5f; // Min brightness for Palpitate (0.0 to 1.0)
-    float       maxBrightness = 1.0f; // Max brightness for Palpitate (0.0 to 1.0)
-    float       frequency = 1.2f;     // Frequency in Hz for Palpitate (smooth breathing pace)
+    float       minBrightness = 0.5f;   // Min brightness for Palpitate (0.0 to 1.0)
+    float       startBrightness = 1.0f; // Initial brightness at start of palpitation (0.0 to 1.0)
+    float       maxBrightness = 1.0f;   // Max brightness for Palpitate (0.0 to 1.0)
+    bool        startFalling = true;    // If true, start on the falling slope
+    float       frequency = 1.2f;       // Frequency in Hz for Palpitate (smooth breathing pace)
+    float       initialPhase = 0.0f;    // Custom phase in radians
+    bool        hasCustomPhase = false; // True if custom phase was explicitly set
 };
 
 struct AnimationFrame {
@@ -57,6 +61,7 @@ struct AnimationSequence {
     bool        resetImages = true; // Clear image overlays to default white on startup
     double      defaultStep = 0.3;  // Default step duration in seconds
     std::vector<std::string>    preloadImages; // Explicitly preloaded image list
+    std::vector<std::string>    preloadVideos; // Explicitly preloaded video list
     std::vector<AnimationFrame> frames;
 
     bool Empty() const { return frames.empty(); }

@@ -1,7 +1,10 @@
 #ifndef ANIMATION_CONTROLLER_H
 #define ANIMATION_CONTROLLER_H
 
+#include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 #include "AnimationTypes.h"
 #include "media/VideoPlayer.h"
 
@@ -16,7 +19,9 @@ public:
     bool LoadFromFile(const std::string& filePath, std::string& outError);
     bool LoadFromSequence(const AnimationSequence& sequence);
 
-    void PreloadImages(RenderEngine& renderEngine);
+    // Preloads both images and videos into memory
+    void PreloadMedia(RenderEngine& renderEngine);
+    void PreloadImages(RenderEngine& renderEngine) { PreloadMedia(renderEngine); }
 
     void Play();
     void Pause();
@@ -36,14 +41,14 @@ public:
     const std::string& SequenceName() const { return m_sequence.name; }
     const std::string& FilePath() const { return m_filePath; }
 
-    VideoPlayer& GetVideoPlayer() { return m_videoPlayer; }
-    const VideoPlayer& GetVideoPlayer() const { return m_videoPlayer; }
-    bool HasBackgroundVideo() const { return m_videoPlayer.IsPlaying() && m_videoPlayer.HasFrame(); }
+    bool HasBackgroundVideo() const {
+        return m_activeVideoPlayer && m_activeVideoPlayer->IsPlaying() && m_activeVideoPlayer->HasFrame();
+    }
     const BYTE* GetBackgroundVideoFrame(int& outW, int& outH) const {
-        if (!m_videoPlayer.HasFrame() || !m_videoPlayer.IsPlaying()) return nullptr;
-        outW = m_videoPlayer.GetWidth();
-        outH = m_videoPlayer.GetHeight();
-        return m_videoPlayer.GetFrameData();
+        if (!m_activeVideoPlayer || !m_activeVideoPlayer->HasFrame() || !m_activeVideoPlayer->IsPlaying()) return nullptr;
+        outW = m_activeVideoPlayer->GetWidth();
+        outH = m_activeVideoPlayer->GetHeight();
+        return m_activeVideoPlayer->GetFrameData();
     }
 
 private:
@@ -54,13 +59,17 @@ private:
         float minBrightness = 0.5f;
         float maxBrightness = 1.0f;
         float frequency = 1.2f;
+        double initialPhase = 0.0;
         double timer = 0.0;
     };
 
     void UpdatePalpitations(double deltaTime, PatternGrid& grid);
     void ClearPalpitations(PatternGrid& grid);
+    void RemovePalpitationsForArea(int areaIndex, PatternGrid& grid);
+    bool PreloadVideo(const std::string& videoPath);
 
-    VideoPlayer       m_videoPlayer;
+    std::unordered_map<std::string, std::unique_ptr<VideoPlayer>> m_videoPlayers;
+    VideoPlayer*      m_activeVideoPlayer;
     AnimationSequence m_sequence;
     std::string       m_filePath;
     size_t            m_currentFrameIndex;

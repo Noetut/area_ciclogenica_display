@@ -170,6 +170,9 @@ std::wstring GetExecutableDir() {
 std::string AnimationParser::ResolvePath(const std::string& inputPath) {
     if (inputPath.empty()) {
         const char* defaults[] = {
+            "animations/area_ciclogenica.txt",
+            "../animations/area_ciclogenica.txt",
+            "../../animations/area_ciclogenica.txt",
             "animations/strobe_show.txt",
             "animations/sequential_wave.txt",
             "../animations/strobe_show.txt",
@@ -183,6 +186,10 @@ std::string AnimationParser::ResolvePath(const std::string& inputPath) {
         }
 
         std::wstring exeDir = GetExecutableDir();
+        std::wstring cand0 = exeDir + L"\\animations\\area_ciclogenica.txt";
+        if (FileExists(cand0)) return WideToUtf8(cand0);
+        std::wstring cand0b = exeDir + L"\\..\\animations\\area_ciclogenica.txt";
+        if (FileExists(cand0b)) return WideToUtf8(cand0b);
         std::wstring cand1 = exeDir + L"\\animations\\strobe_show.txt";
         if (FileExists(cand1)) return WideToUtf8(cand1);
         std::wstring cand2 = exeDir + L"\\animations\\sequential_wave.txt";
@@ -190,7 +197,7 @@ std::string AnimationParser::ResolvePath(const std::string& inputPath) {
         std::wstring cand3 = exeDir + L"\\..\\animations\\strobe_show.txt";
         if (FileExists(cand3)) return WideToUtf8(cand3);
 
-        return "animations/strobe_show.txt";
+        return "animations/area_ciclogenica.txt";
     }
 
     std::wstring direct = AnsiToWide(inputPath);
@@ -296,6 +303,16 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                     while (!token.empty() && (token.back() == ',' || token.back() == ';')) token.pop_back();
                     if (!token.empty()) {
                         outSequence.preloadImages.push_back(token);
+                    }
+                }
+                continue;
+            } else if (key == "PRELOAD_VIDEOS" || key == "PRELOAD_VIDEO") {
+                std::istringstream iss(val);
+                std::string token;
+                while (iss >> token) {
+                    while (!token.empty() && (token.back() == ',' || token.back() == ';')) token.pop_back();
+                    if (!token.empty()) {
+                        outSequence.preloadVideos.push_back(token);
                     }
                 }
                 continue;
@@ -606,11 +623,17 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                 AnimationAction action;
                 action.type = ActionType::Palpitate;
                 action.minBrightness = 0.5f;
+                action.startBrightness = 0.5f;
                 action.maxBrightness = 1.0f;
                 action.frequency = 1.2f;
 
+                struct PctValue {
+                    float value = 0.0f;
+                    bool isDown = false;
+                };
+                std::vector<PctValue> pctList;
+
                 std::string tok;
-                bool hasMin = false;
                 while (cs >> tok) {
                     std::string tokUpper = ToUpper(tok);
                     if (tokUpper == "STOP" || tokUpper == "OFF") {
@@ -621,16 +644,30 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                         action.targetId = -2; // Sentinel for ALL
                         continue;
                     }
-                    if (!tok.empty() && tok.back() == '%') {
-                        std::string numPart = tok.substr(0, tok.size() - 1);
+                    if (tokUpper.size() > 3 && (tokUpper.rfind("DEG") == tokUpper.size() - 3)) {
+                        std::string numPart = tok.substr(0, tok.size() - 3);
+                        try {
+                            float deg = std::stof(numPart);
+                            action.initialPhase = deg * 3.14159265358979323846f / 180.0f;
+                            action.hasCustomPhase = true;
+                        } catch (...) {}
+                        continue;
+                    }
+                    size_t pctPos = tok.find('%');
+                    if (pctPos != std::string::npos) {
+                        std::string numPart = tok.substr(0, pctPos);
+                        std::string suffix = ToUpper(tok.substr(pctPos + 1));
+                        bool isDown = false;
+                        if (!numPart.empty() && numPart[0] == '-') {
+                            isDown = true;
+                            numPart = numPart.substr(1);
+                        }
+                        if (suffix.find("DOWN") != std::string::npos || suffix.find("BAJA") != std::string::npos || suffix == "D") {
+                            isDown = true;
+                        }
                         try {
                             float pct = std::stof(numPart) / 100.0f;
-                            if (!hasMin) {
-                                action.minBrightness = pct;
-                                hasMin = true;
-                            } else {
-                                action.maxBrightness = pct;
-                            }
+                            pctList.push_back({ pct, isDown });
                         } catch (...) {}
                         continue;
                     }
@@ -647,6 +684,26 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                         action.targetName = tok;
                     }
                 }
+
+                if (pctList.size() == 1) {
+                    action.minBrightness = 0.0f;
+                    action.startBrightness = pctList[0].value;
+                    action.maxBrightness = pctList[0].value;
+                    action.startFalling = pctList[0].isDown;
+                } else if (pctList.size() == 2) {
+                    // Two percentages: min% max%. Defaults to starting at max% (100%) and falling towards min%
+                    action.minBrightness = pctList[0].value;
+                    action.startBrightness = pctList[1].value;
+                    action.maxBrightness = pctList[1].value;
+                    action.startFalling = true;
+                } else if (pctList.size() >= 3) {
+                    // min% start% max%
+                    action.minBrightness = pctList[0].value;
+                    action.startBrightness = pctList[1].value;
+                    action.maxBrightness = pctList[2].value;
+                    action.startFalling = pctList[1].isDown;
+                }
+
                 if (action.minBrightness > action.maxBrightness) {
                     std::swap(action.minBrightness, action.maxBrightness);
                 }

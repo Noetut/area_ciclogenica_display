@@ -19,6 +19,7 @@ loop: false
 default_step: 0.2s
 reset_images: true
 preload_images: cloud_01, Portada, talon_de_aquiles
+preload_videos: clouds_video
 
 # ------------------------------------------------------------------------------
 # Segmento 0: Estado inicial apagado (en negro)
@@ -55,32 +56,33 @@ WAIT_CLICK
 
 # ------------------------------------------------------------------------------
 # Segmento 2: Presentación 1 - Los tres vinilos
-# Palpitación parpadeante continua entre 50% y 100% de blanco hasta clic.
-#   - ID 0: vinyl_mecharadio
-#   - ID 1: vinyl_cancionero
-#   - ID 2: vinyl_turboviolencia
+# Desfase trifásico (0º, 120º, 240º) de 50% a 100% de blanco hasta clic.
+#   - ID 0: vinyl_mecharadio (abajo)
+#   - ID 1: vinyl_cancionero (medio)
+#   - ID 2: vinyl_turboviolencia (arriba)
 # ------------------------------------------------------------------------------
-ALL_OFF & PALPITATE 0 1 2 50% 100% 0.75Hz
+ALL_OFF & PALPITATE 0 50% 100% 0deg 0.75Hz & PALPITATE 1 50% 100% 120deg 0.75Hz & PALPITATE 2 50% 100% 240deg 0.75Hz
 WAIT_CLICK
 
 # ------------------------------------------------------------------------------
 # Segmento 3: Presentación 2 - Frames Brais y Frame Pepu
-# Palpitación parpadeante continua entre 50% y 100% de blanco hasta clic.
-#   - ID 4: frame_brais_clouds
-#   - ID 5: frame_brais_eyes
-#   - ID 8: frame_pepus
+# Desfase trifásico (0º, 120º, 240º) entre los tres marcos de izquierda a derecha.
+#   - ID 4: frame_brais_clouds (izquierda)
+#   - ID 8: frame_pepus (centro)
+#   - ID 5: frame_brais_eyes (derecha)
+# (Alternativa bifásica persona vs persona: PALPITATE 4 5 50% 100% 0deg 0.75Hz & PALPITATE 8 50% 100% 180deg 0.75Hz)
 # ------------------------------------------------------------------------------
-ALL_OFF & PALPITATE 4 5 8 50% 100% 0.75Hz
+ALL_OFF & PALPITATE 4 50% 100% 0deg 0.75Hz & PALPITATE 8 50% 100% 120deg 0.75Hz & PALPITATE 5 50% 100% 240deg 0.75Hz
 WAIT_CLICK
 
 # ------------------------------------------------------------------------------
 # Segmento 4: Presentación 3 - Bufanda, Aneto y Margarita
-# Palpitación parpadeante continua entre 50% y 100% de blanco hasta clic.
-#   - ID 3: frame_aneto
-#   - ID 6: scarf_vvv
-#   - ID 7: frame_margarita
+# Desfase trifásico (0º, 120º, 240º) de 50% a 100% de blanco hasta clic.
+#   - ID 3: frame_aneto (izquierda)
+#   - ID 7: frame_margarita (centro)
+#   - ID 6: scarf_vvv (derecha)
 # ------------------------------------------------------------------------------
-ALL_OFF & PALPITATE 3 6 7 50% 100% 0.75Hz
+ALL_OFF & PALPITATE 3 50% 100% 0deg 0.75Hz & PALPITATE 7 50% 100% 120deg 0.75Hz & PALPITATE 6 50% 100% 240deg 0.75Hz
 WAIT_CLICK
 
 # ------------------------------------------------------------------------------
