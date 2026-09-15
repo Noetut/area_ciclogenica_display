@@ -1,0 +1,170 @@
+# ==============================================================================
+# Animation: Strobe & Spatial Light Show
+# Mapping real de IDs según config/pattern_config.json:
+#   - Columna Vinilos (Izquierda): 2 (arriba), 1 (medio), 0 (abajo)
+#   - Fila Superior (Centro):      3 (aneto), 4 (brais_clouds), 5 (brais_eyes)
+#   - Fila Inferior (Centro):      9 (green_screen), 8 (pepus), 7 (margarita)
+#   - Borde Derecho (Bufanda):     6 (scarf_vvv - franja vertical)
+# ==============================================================================
+name: Strobe & Spatial Light Show
+loop: true
+default_step: 80ms
+
+# ------------------------------------------------------------------------------
+# INTRO: Awakening / Pulsos staccato en la columna de Vinilos
+# ------------------------------------------------------------------------------
+200ms ALL_OFF
+70ms  ON 2
+70ms  OFF 2
+70ms  ON 1
+70ms  OFF 1
+70ms  ON 0
+70ms  OFF 0
+100ms ALL_OFF
+
+# Doble flash rápido en los tres vinilos
+50ms  ON 2 & ON 1 & ON 0
+50ms  ALL_OFF
+50ms  ON 2 & ON 1 & ON 0
+100ms ALL_OFF
+
+# Respuesta en la Bufanda (extremo derecho, ID 6)
+60ms  ON 6
+60ms  ALL_OFF
+60ms  ON 6
+120ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 1: Barrido Lateral Espacial (Izquierda a Derecha e Ida y Vuelta)
+#   - Columna 1 (Vinilos): 2, 1, 0
+#   - Columna 2 (Marcos Izq): 3, 9
+#   - Columna 3 (Marcos Centro): 4, 8
+#   - Columna 4 (Marcos Der): 5, 7
+#   - Columna 5 (Bufanda): 6
+# ------------------------------------------------------------------------------
+# Ida: de vinilos a bufanda
+80ms  ON 2 & ON 1 & ON 0
+80ms  OFF 2 & OFF 1 & OFF 0 & ON 3 & ON 9
+80ms  OFF 3 & OFF 9 & ON 4 & ON 8
+80ms  OFF 4 & OFF 8 & ON 5 & ON 7
+90ms  OFF 5 & OFF 7 & ON 6
+
+# Vuelta: de bufanda a vinilos
+70ms  OFF 6 & ON 5 & ON 7
+70ms  OFF 5 & OFF 7 & ON 4 & ON 8
+70ms  OFF 4 & OFF 8 & ON 3 & ON 9
+70ms  OFF 3 & OFF 9 & ON 2 & ON 1 & ON 0
+100ms ALL_OFF
+
+# Segunda pasada rápida (doble velocidad)
+50ms  ON 2 & ON 1 & ON 0
+50ms  OFF 2 & OFF 1 & OFF 0 & ON 3 & ON 9
+50ms  OFF 3 & OFF 9 & ON 4 & ON 8
+50ms  OFF 4 & OFF 8 & ON 5 & ON 7
+50ms  OFF 5 & OFF 7 & ON 6
+50ms  OFF 6 & ON 5 & ON 7
+50ms  OFF 5 & OFF 7 & ON 4 & ON 8
+50ms  OFF 4 & OFF 8 & ON 3 & ON 9
+50ms  OFF 3 & OFF 9 & ON 2 & ON 1 & ON 0
+100ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 2: Espiral Perimetral (En el sentido de las agujas del reloj)
+# Trayectoria: 2 -> 3 -> 4 -> 5 -> 6 (bufanda) -> 7 -> 8 -> 9 -> 0 -> 1 -> repeat
+# ------------------------------------------------------------------------------
+60ms  ON 2
+60ms  OFF 2 & ON 3
+60ms  OFF 3 & ON 4
+60ms  OFF 4 & ON 5
+60ms  OFF 5 & ON 6
+60ms  OFF 6 & ON 7
+60ms  OFF 7 & ON 8
+60ms  OFF 8 & ON 9
+60ms  OFF 9 & ON 0
+60ms  OFF 0 & ON 1
+
+# Ronda 2: Estela de 2 elementos (más rápido)
+45ms  ON 2
+45ms  ON 3 & OFF 1
+45ms  ON 4 & OFF 2
+45ms  ON 5 & OFF 3
+45ms  ON 6 & OFF 4
+45ms  ON 7 & OFF 5
+45ms  ON 8 & OFF 6
+45ms  ON 9 & OFF 7
+45ms  ON 0 & OFF 8
+45ms  ON 1 & OFF 9
+45ms  OFF 0 & OFF 1
+45ms  ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 3: Expansión desde el Núcleo Central y Alas Exteriores
+# ------------------------------------------------------------------------------
+# Núcleo central (marcos centrales 4 y 8)
+80ms  ON 4 & ON 8
+50ms  ALL_OFF
+80ms  ON 4 & ON 8
+# Expansión a marcos circundantes (3, 9, 5, 7)
+70ms  ON 3 & ON 9 & ON 5 & ON 7
+# Expansión a los pilares exteriores (Vinilos 2, 1, 0 + Bufanda 6)
+80ms  ON 2 & ON 1 & ON 0 & ON 6
+# Constelación completa iluminada
+150ms ALL_ON
+100ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 4: Fila Superior vs Fila Inferior (Alternancia rítmica)
+# Fila Superior: Vinilo sup (2) + Marcos sup (3, 4, 5)
+# Fila Inferior: Vinilo inf (0) + Marcos inf (9, 8, 7)
+# ------------------------------------------------------------------------------
+60ms  ON 2 & ON 3 & ON 4 & ON 5
+60ms  ALL_OFF
+60ms  ON 0 & ON 9 & ON 8 & ON 7
+60ms  ALL_OFF
+50ms  ON 2 & ON 3 & ON 4 & ON 5
+50ms  ALL_OFF
+50ms  ON 0 & ON 9 & ON 8 & ON 7
+50ms  ALL_OFF
+
+# Ping-pong ultra rápido sin apagón intermedio
+45ms  ON 2 & ON 3 & ON 4 & ON 5 & OFF 0 & OFF 9 & OFF 8 & OFF 7
+45ms  OFF 2 & OFF 3 & OFF 4 & OFF 5 & ON 0 & ON 9 & ON 8 & ON 7
+45ms  ON 2 & ON 3 & ON 4 & ON 5 & OFF 0 & OFF 9 & OFF 8 & OFF 7
+45ms  OFF 2 & OFF 3 & OFF 4 & OFF 5 & ON 0 & ON 9 & ON 8 & ON 7
+80ms  ALL_OFF
+
+# ------------------------------------------------------------------------------
+# MOVEMENT 5: Ritmo de Tablero de Ajedrez (Alternancia cruzada)
+# Grupo A: Vinilos 2 y 0, marco central sup 4, marco inf der 7
+# Grupo B: Vinilo medio 1, marco sup izq 3, marco sup der 5, marco inf centro 8, bufanda 6
+# ------------------------------------------------------------------------------
+60ms  ON 2 & ON 0 & ON 4 & ON 7
+60ms  OFF 2 & OFF 0 & OFF 4 & OFF 7 & ON 1 & ON 3 & ON 5 & ON 8 & ON 6
+60ms  ON 2 & ON 0 & ON 4 & ON 7 & OFF 1 & OFF 3 & OFF 5 & OFF 8 & OFF 6
+60ms  OFF 2 & OFF 0 & OFF 4 & OFF 7 & ON 1 & ON 3 & ON 5 & ON 8 & ON 6
+50ms  ON 2 & ON 0 & ON 4 & ON 7 & OFF 1 & OFF 3 & OFF 5 & OFF 8 & OFF 6
+50ms  OFF 2 & OFF 0 & OFF 4 & OFF 7 & ON 1 & ON 3 & ON 5 & ON 8 & ON 6
+100ms ALL_OFF
+
+# ------------------------------------------------------------------------------
+# FINALE: Crescendo Estroboscópico -> Gran Flash -> Silencio
+# ------------------------------------------------------------------------------
+60ms  ALL_ON
+60ms  ALL_OFF
+50ms  ALL_ON
+50ms  ALL_OFF
+40ms  ALL_ON
+40ms  ALL_OFF
+40ms  ALL_ON
+40ms  ALL_OFF
+35ms  ALL_ON
+35ms  ALL_OFF
+
+# Tres impactos contundentes
+150ms ALL_ON
+100ms ALL_OFF
+150ms ALL_ON
+100ms ALL_OFF
+300ms ALL_ON
+# Pausa dramática antes de reiniciar el bucle
+500ms ALL_OFF

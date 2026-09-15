@@ -50,10 +50,12 @@ private:
     void ProcessEvents();
     void HandleKeyDown(WPARAM key);
     void HandleShowModeKey(WPARAM key);
+    void HandleLeftClick();
     void Update(double deltaTime);
     void Render();
     void RenderCalibrationOverlay();
     void PrintControls() const;
+    void CycleAnimation();
 
     DisplayManager        m_displayManager;
     RenderEngine          m_renderEngine;

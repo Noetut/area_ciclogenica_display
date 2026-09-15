@@ -6,6 +6,10 @@ namespace {
 const int kNewAreaWidth  = 200;
 const int kNewAreaHeight = 150;
 
+// Geometry of a text area created with [T] in calibration mode.
+const int kNewTextAreaWidth  = 600;
+const int kNewTextAreaHeight = 120;
+
 // Offset applied to a copy made with [D], so it does not hide under the source.
 const int kDuplicateOffset = 20;
 
@@ -59,9 +63,49 @@ void PatternGrid::SetAllColor(COLORREF color) {
     }
 }
 
+void PatternGrid::SetAreaImage(int index, const std::string& imagePath) {
+    if (IsValidIndex(index)) {
+        m_areas[index].imagePath = imagePath;
+    }
+}
+
+void PatternGrid::ClearAreaImage(int index) {
+    if (IsValidIndex(index)) {
+        m_areas[index].imagePath.clear();
+    }
+}
+
+void PatternGrid::ClearAllImages() {
+    for (auto& area : m_areas) {
+        area.imagePath.clear();
+    }
+}
+
+void PatternGrid::SetAreaText(int index, const std::string& text, const std::string& fontFace, int fontSize, COLORREF color) {
+    if (IsValidIndex(index)) {
+        m_areas[index].text = text;
+        m_areas[index].fontFace = fontFace.empty() ? "Arial" : fontFace;
+        m_areas[index].fontSize = fontSize > 0 ? fontSize : 32;
+        m_areas[index].textColor = color;
+    }
+}
+
+void PatternGrid::ClearAreaText(int index) {
+    if (IsValidIndex(index)) {
+        m_areas[index].text.clear();
+    }
+}
+
+void PatternGrid::ClearAllTexts() {
+    for (auto& area : m_areas) {
+        area.text.clear();
+    }
+}
+
 int PatternGrid::CreateArea(int canvasWidth, int canvasHeight) {
     ProjectionArea area;
     area.id = NextFreeId();
+    area.type = "quad";
     area.name = "area_" + std::to_string(area.id);
     area.description = "Created in calibration mode";
     area.quad = Quad::FromRect((canvasWidth  - kNewAreaWidth)  / 2,
@@ -69,6 +113,26 @@ int PatternGrid::CreateArea(int canvasWidth, int canvasHeight) {
                                kNewAreaWidth,
                                kNewAreaHeight);
     area.color = RGB(255, 255, 255);
+    area.isVisible = true;
+
+    m_areas.push_back(area);
+    return static_cast<int>(m_areas.size()) - 1;
+}
+
+int PatternGrid::CreateTextArea(int canvasWidth, int canvasHeight) {
+    ProjectionArea area;
+    area.id = NextFreeId();
+    area.type = "text";
+    area.name = "text_box_" + std::to_string(area.id);
+    area.description = "Text projection box created in calibration";
+    area.quad = Quad::FromRect((canvasWidth  - kNewTextAreaWidth)  / 2,
+                               (canvasHeight - kNewTextAreaHeight) / 2,
+                               kNewTextAreaWidth,
+                               kNewTextAreaHeight);
+    area.color = RGB(255, 255, 255);
+    area.textColor = RGB(255, 255, 255);
+    area.fontFace = "Arial";
+    area.fontSize = 32;
     area.isVisible = true;
 
     m_areas.push_back(area);

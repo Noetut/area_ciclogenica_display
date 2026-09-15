@@ -27,13 +27,23 @@ public:
     void SetAllVisible(bool visible);
     bool IsAreaVisible(int index) const;
 
-    // --- Colour -----------------------------------------------------------
+    // --- Colour & Image --------------------------------------------------
     void SetAreaColor(int index, COLORREF color);
     void SetAllColor(COLORREF color);
+    void SetAreaImage(int index, const std::string& imagePath);
+    void ClearAreaImage(int index);
+    void ClearAllImages();
+
+    // --- Text -------------------------------------------------------------
+    void SetAreaText(int index, const std::string& text, const std::string& fontFace = "Arial", int fontSize = 32, COLORREF color = RGB(255, 255, 255));
+    void ClearAreaText(int index);
+    void ClearAllTexts();
 
     // --- Lifecycle (calibration) ------------------------------------------
     // Appends a default area centred on the canvas and returns its index.
     int  CreateArea(int canvasWidth, int canvasHeight);
+    // Appends a default text area centred on the canvas and returns its index.
+    int  CreateTextArea(int canvasWidth, int canvasHeight);
     // Appends a copy of an existing area offset by a few pixels; returns the
     // new index, or -1 if the source index is invalid.
     int  DuplicateArea(int index);

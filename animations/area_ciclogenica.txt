@@ -1,0 +1,127 @@
+# ==============================================================================
+# Animación: Área Ciclogénica
+# Configuración de IDs:
+#   - ID 0: vinyl_mecharadio
+#   - ID 1: vinyl_cancionero
+#   - ID 2: vinyl_turboviolencia
+#   - ID 3: frame_aneto
+#   - ID 4: frame_brais_clouds
+#   - ID 5: frame_brais_eyes
+#   - ID 6: scarf_vvv
+#   - ID 7: frame_margarita
+#   - ID 8: frame_pepus
+#   - ID 9: frame_green_screen
+#   - ID 10: text_display
+#   - ID 11: text_top
+# ==============================================================================
+name: Área Ciclogénica
+loop: false
+default_step: 0.2s
+reset_images: true
+preload_images: cloud_01, Portada, talon_de_aquiles
+preload_videos: clouds_video
+
+# ------------------------------------------------------------------------------
+# Segmento 0: Estado inicial apagado (en negro)
+# Pantalla completamente apagada en negro.
+# Espera a un clic para avanzar al Segmento 1 (Barrido).
+# ------------------------------------------------------------------------------
+CLEAR_IMAGES & ALL_OFF
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 1: Barrido por columnas (ida y vuelta)
+# Barrido comenzando por los vinilos hacia la derecha y de vuelta a la izquierda:
+#   - Columna 1: Vinilos (IDs 0, 1, 2)
+#   - Columna 2: IDs 3, 9 (frame_aneto, frame_green_screen)
+#   - Columna 3: IDs 4, 8 (frame_brais_clouds, frame_pepus)
+#   - Columna 4: IDs 5, 7 (frame_brais_eyes, frame_margarita)
+#   - Columna 5: ID 6 (scarf_vvv)
+# Al finalizar la vuelta queda apagado esperando clic para avanzar al Segmento 2.
+# ------------------------------------------------------------------------------
+# Ida: de vinilos (izquierda) a bufanda (derecha)
+0.1s ON 0 & ON 1 & ON 2
+0.1s OFF 0 & OFF 1 & OFF 2 & ON 3 & ON 9
+0.1s OFF 3 & OFF 9 & ON 4 & ON 8
+0.1s OFF 4 & OFF 8 & ON 5 & ON 7
+0.1s OFF 5 & OFF 7 & ON 6
+
+# Vuelta: de bufanda (derecha) a vinilos (izquierda)
+0.1s OFF 6 & ON 5 & ON 7
+0.1s OFF 5 & OFF 7 & ON 4 & ON 8
+0.1s OFF 4 & OFF 8 & ON 3 & ON 9
+0.1s OFF 3 & OFF 9 & ON 0 & ON 1 & ON 2
+ALL_OFF
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 2: Presentación 1 - Los tres vinilos
+# Desfase trifásico (0º, 120º, 240º) de 50% a 100% de blanco hasta clic.
+#   - ID 0: vinyl_mecharadio (abajo)
+#   - ID 1: vinyl_cancionero (medio)
+#   - ID 2: vinyl_turboviolencia (arriba)
+# ------------------------------------------------------------------------------
+ALL_OFF & PALPITATE 0 50% 100% 0deg 0.75Hz & PALPITATE 1 50% 100% 120deg 0.75Hz & PALPITATE 2 50% 100% 240deg 0.75Hz
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 3: Presentación 2 - Frames Brais y Frame Pepu
+# Desfase trifásico (0º, 120º, 240º) entre los tres marcos de izquierda a derecha.
+#   - ID 4: frame_brais_clouds (izquierda)
+#   - ID 8: frame_pepus (centro)
+#   - ID 5: frame_brais_eyes (derecha)
+# (Alternativa bifásica persona vs persona: PALPITATE 4 5 50% 100% 0deg 0.75Hz & PALPITATE 8 50% 100% 180deg 0.75Hz)
+# ------------------------------------------------------------------------------
+ALL_OFF & PALPITATE 4 50% 100% 0deg 0.75Hz & PALPITATE 8 50% 100% 120deg 0.75Hz & PALPITATE 5 50% 100% 240deg 0.75Hz
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 4: Presentación 3 - Bufanda, Aneto y Margarita
+# Desfase trifásico (0º, 120º, 240º) de 50% a 100% de blanco hasta clic.
+#   - ID 3: frame_aneto (izquierda)
+#   - ID 7: frame_margarita (centro)
+#   - ID 6: scarf_vvv (derecha)
+# ------------------------------------------------------------------------------
+ALL_OFF & PALPITATE 3 50% 100% 0deg 0.75Hz & PALPITATE 7 50% 100% 120deg 0.75Hz & PALPITATE 6 50% 100% 240deg 0.75Hz
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 5 (antes Segmento 1):
+# Todos los cuadrados apagados y únicamente la zona 9 (frame_green_screen)
+# encendida en blanco.
+# Espera a clic izquierdo para avanzar.
+# ------------------------------------------------------------------------------
+CLEAR_IMAGES & ALL_OFF & ON 9
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 6 (antes Segmento 2):
+# Se apagan y tras 0.5s se van encendiendo de 0 a 8 una a una (0.1s cada una)
+# apagándose a continuación. Luego se proyecta la imagen cloud_01 en la zona 9.
+# ------------------------------------------------------------------------------
+0.5s ALL_OFF
+0.1s ON 0
+0.1s OFF 0 & ON 1
+0.1s OFF 1 & ON 2
+0.1s OFF 2 & ON 3
+0.1s OFF 3 & ON 4
+0.1s OFF 4 & ON 5
+0.1s OFF 5 & ON 6
+0.1s OFF 6 & ON 7
+0.1s OFF 7 & ON 8
+OFF 8 & IMAGE 9 cloud_01
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 7 (antes Segmento 3):
+# 1. Proyectar talon_de_aquiles en zona 9
+# 2. Delay antes de que aparezca el vídeo (modificable con WAIT <segundos>, ej: WAIT 3)
+# 3. Arrancar el vídeo clouds_video de fondo y proyectar "ÁREA CICLOGÉNICA" en caja de texto (ID 11)
+#    La imagen y el texto quedan por encima del vídeo de fondo.
+# 4. Esperar a clic izquierdo.
+# ------------------------------------------------------------------------------
+IMAGE 9 talon_de_aquiles
+WAIT 3
+BG_VIDEO clouds_video & TEXT 11 "Bebas Neue Cyrillic" 100 bold "ÁREA CICLOGÉNICA"
+WAIT_CLICK
+

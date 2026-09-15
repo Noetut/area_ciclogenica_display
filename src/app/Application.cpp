@@ -1,8 +1,12 @@
 #include "Application.h"
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <thread>
+#include <vector>
+#include <mmsystem.h>
+#include <timeapi.h>
 
 #include "anim/AnimationParser.h"
 #include "util/StringUtil.h"
@@ -120,6 +124,7 @@ bool Application::Initialize(const AppOptions& options) {
     std::string animError;
     if (m_animController.LoadFromFile(resolvedAnimPath, animError)) {
         std::cout << "[Application] Animation loaded: " << resolvedAnimPath << std::endl;
+        m_animController.PreloadMedia(m_renderEngine);
     } else if (!options.animationPath.empty()) {
         std::cerr << "[Application] WARNING: Failed to load animation ("
                   << options.animationPath << "): " << animError << std::endl;
@@ -139,8 +144,10 @@ void Application::PrintControls() const {
     std::cout << "---------------------------------------------------------" << std::endl;
     std::cout << "                    SHOW MODE                            " << std::endl;
     std::cout << "  [Space] Play / Pause animation                         " << std::endl;
+    std::cout << "  [Click / Enter] Trigger next animation segment         " << std::endl;
     std::cout << "  [R]     Restart animation                              " << std::endl;
-    std::cout << "  [1 - 9] Toggle individual area ON/OFF                  " << std::endl;
+    std::cout << "  [Tab]   Switch to next animation script                " << std::endl;
+    std::cout << "  [0 - 9] Toggle individual area ON/OFF (by ID)          " << std::endl;
     std::cout << "  [A]     Turn ALL areas ON                              " << std::endl;
     std::cout << "  [O]     Turn ALL areas OFF (clear to black)            " << std::endl;
     std::cout << "  [F1]    Enter CALIBRATION mode                         " << std::endl;
@@ -169,6 +176,7 @@ void Application::SetMode(AppMode mode) {
 
     if (m_mode == AppMode::Calibration) {
         m_calibration.OnExit();
+        m_renderEngine.ClearQuadCache();
     }
 
     m_mode = mode;
@@ -201,21 +209,35 @@ void Application::HandleShowModeKey(WPARAM key) {
         return;
     }
 
+    if (key == VK_RETURN) {
+        m_animController.TriggerClick(m_grid);
+        return;
+    }
+
     if (key == 'R') {
         m_animController.Restart(m_grid);
         return;
     }
 
-    if (key >= '1' && key <= '9') {
-        int index = static_cast<int>(key - '1');
-        if (index >= static_cast<int>(m_grid.GetCount())) {
-            std::cout << "[Application] No area at index " << index << "." << std::endl;
+    if (key == VK_TAB) {
+        CycleAnimation();
+        return;
+    }
+
+    if (key >= '0' && key <= '9') {
+        int id = static_cast<int>(key - '0');
+        int index = m_grid.FindIndexById(id);
+        if (index < 0 && id > 0) {
+            index = id - 1; // fallback
+        }
+        if (index < 0 || index >= static_cast<int>(m_grid.GetCount())) {
+            std::cout << "[Application] No area with ID or index " << id << "." << std::endl;
             return;
         }
         m_grid.ToggleArea(index);
         const auto* area = m_grid.GetArea(index);
         if (area) {
-            std::cout << "[Application] Area #" << index << " [" << area->name << "] toggled -> "
+            std::cout << "[Application] Area ID " << area->id << " [" << area->name << "] toggled -> "
                       << (area->isVisible ? "ON" : "OFF") << std::endl;
         }
         return;
@@ -256,6 +278,12 @@ void Application::HandleKeyDown(WPARAM key) {
     HandleShowModeKey(key);
 }
 
+void Application::HandleLeftClick() {
+    if (m_mode == AppMode::Show) {
+        m_animController.TriggerClick(m_grid);
+    }
+}
+
 void Application::ProcessEvents() {
     MSG msg;
     while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -265,6 +293,8 @@ void Application::ProcessEvents() {
             // Filtered by window: the thread queue can carry messages that are
             // not meant for the projection window.
             HandleKeyDown(msg.wParam);
+        } else if (msg.message == WM_LBUTTONDOWN && msg.hwnd == m_displayManager.GetHWND()) {
+            HandleLeftClick();
         }
         TranslateMessage(&msg);
         DispatchMessageW(&msg);
@@ -281,10 +311,8 @@ void Application::Update(double deltaTime) {
         return;
     }
 
-    // Show mode: advance animation sequence
-    if (m_animController.IsPlaying()) {
-        m_animController.Update(deltaTime, m_grid);
-    }
+    // Show mode: advance animation sequence & background video playback
+    m_animController.Update(deltaTime, m_grid);
 }
 
 void Application::RenderCalibrationOverlay() {
@@ -305,14 +333,22 @@ void Application::RenderCalibrationOverlay() {
                                        isSelected ? kSelectedOutline : kDimOutline,
                                        isSelected ? kSelectedOutlineWidth : kOutlineThickness);
 
-        // Index label, so the operator knows which digit selects this area.
+        // ID label, so the operator knows which digit selects this area.
         std::wostringstream label;
-        label << L"[" << (i + 1) << L"] " << Utf8ToWide(area.name);
+        label << L"[" << area.id << L"] " << Utf8ToWide(area.name);
+        if (area.type == "text") {
+            label << L" (TEXT)";
+        }
         m_renderEngine.DrawHudText(area.quad.corners[0].x + kAreaLabelInset,
                                    area.quad.corners[0].y + kAreaLabelInset,
                                    label.str(),
                                    isSelected ? kSelectedOutline : kLabelText,
                                    kLabelBgAlpha, kLabelTextAlpha);
+
+        if (area.type == "text" && isSelected) {
+            std::string preview = area.text.empty() ? "Aa Texto" : area.text;
+            m_renderEngine.DrawQuadText(area.quad, preview, area.fontFace, area.fontSize, RGB(0, 220, 255));
+        }
 
         if (!isSelected) continue;
 
@@ -349,17 +385,25 @@ void Application::Render() {
     if (m_mode == AppMode::Calibration) {
         RenderCalibrationOverlay();
     } else {
-        m_renderEngine.RenderAreas(m_grid.GetAreas());
+        int bgW = 0, bgH = 0;
+        const BYTE* bgPixels = m_animController.GetBackgroundVideoFrame(bgW, bgH);
+        m_renderEngine.RenderAreas(m_grid.GetAreas(), bgPixels, bgW, bgH);
     }
 
     m_renderEngine.EndFrame();
 }
 
 void Application::Run() {
+    timeBeginPeriod(1);
+
     using clock = std::chrono::high_resolution_clock;
     auto previousTime = clock::now();
 
-    const std::chrono::duration<double> targetFrameDuration(1.0 / kTargetFPS);
+    double targetFPS = static_cast<double>(m_displayManager.GetRefreshRate());
+    if (targetFPS < 30.0 || targetFPS > 360.0) targetFPS = 60.0;
+    const std::chrono::duration<double> targetFrameDuration(1.0 / targetFPS);
+
+    std::cout << "[Application] Running main loop locked to " << targetFPS << " FPS" << std::endl;
 
     while (m_isRunning) {
         auto currentTime = clock::now();
@@ -367,18 +411,28 @@ void Application::Run() {
         previousTime = currentTime;
 
         double deltaTime = elapsedTime.count();
+        if (deltaTime > 0.1) deltaTime = 0.1;
+        if (deltaTime < 0.0) deltaTime = 0.0;
 
         ProcessEvents();
         Update(deltaTime);
         Render();
 
-        // Cap frame rate at 60 FPS to prevent CPU hogging
+        // Cap frame rate precisely at 60 FPS without Windows timer jitter
         auto frameEndTime = clock::now();
         auto frameDuration = frameEndTime - currentTime;
         if (frameDuration < targetFrameDuration) {
-            std::this_thread::sleep_for(targetFrameDuration - frameDuration);
+            auto sleepDuration = targetFrameDuration - frameDuration;
+            if (sleepDuration > std::chrono::milliseconds(2)) {
+                std::this_thread::sleep_for(sleepDuration - std::chrono::milliseconds(1));
+            }
+            while (clock::now() - currentTime < targetFrameDuration) {
+                // Precise spin-wait for sub-millisecond accuracy
+            }
         }
     }
+
+    timeEndPeriod(1);
 
     if (m_mode == AppMode::Calibration && m_calibration.IsDirty()) {
         std::cerr << "[Application] WARNING: exited with UNSAVED calibration changes." << std::endl;
@@ -389,4 +443,67 @@ void Application::Run() {
 
 void Application::Quit() {
     m_isRunning = false;
+}
+
+void Application::CycleAnimation() {
+    std::vector<std::string> animFiles;
+    const char* searchDirs[] = { "animations", "../animations" };
+
+    for (const char* dir : searchDirs) {
+        std::wstring searchPattern = AnsiToWide(std::string(dir) + "/*.txt");
+        WIN32_FIND_DATAW findData;
+        HANDLE hFind = FindFirstFileW(searchPattern.c_str(), &findData);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    std::string fileName = WideToUtf8(findData.cFileName);
+                    std::string fullPath = std::string(dir) + "/" + fileName;
+
+                    bool exists = false;
+                    for (const auto& existing : animFiles) {
+                        if (existing.find(fileName) != std::string::npos) {
+                            exists = true;
+                            break;
+                        }
+                    }
+                    if (!exists) {
+                        animFiles.push_back(fullPath);
+                    }
+                }
+            } while (FindNextFileW(hFind, &findData));
+            FindClose(hFind);
+        }
+    }
+
+    if (animFiles.empty()) {
+        std::cout << "[Application] No animation files found in animations/ directory." << std::endl;
+        return;
+    }
+
+    // Sort for deterministic cycling order
+    std::sort(animFiles.begin(), animFiles.end());
+
+    size_t currentIndex = 0;
+    const std::string& currentPath = m_animController.FilePath();
+    for (size_t i = 0; i < animFiles.size(); ++i) {
+        if (!currentPath.empty() && (animFiles[i] == currentPath ||
+            currentPath.find(animFiles[i]) != std::string::npos ||
+            animFiles[i].find(currentPath) != std::string::npos)) {
+            currentIndex = i;
+            break;
+        }
+    }
+
+    size_t nextIndex = (currentIndex + 1) % animFiles.size();
+    std::string nextPath = animFiles[nextIndex];
+
+    std::string err;
+    if (m_animController.LoadFromFile(nextPath, err)) {
+        m_animController.PreloadMedia(m_renderEngine);
+        m_animController.Restart(m_grid);
+        std::cout << "[Application] Switched to animation: " << nextPath
+                  << " ('" << m_animController.SequenceName() << "')" << std::endl;
+    } else {
+        std::cerr << "[Application] Failed to load " << nextPath << ": " << err << std::endl;
+    }
 }

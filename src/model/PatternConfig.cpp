@@ -117,6 +117,7 @@ bool ParseArea(const ordered_json& node, ProjectionArea& out) {
     }
 
     out.id          = node.value("id", 0);
+    out.type        = node.value("type", "quad");
     out.name        = node.value("name", std::string());
     out.description = node.value("description", std::string());
     out.isVisible   = node.value("visible", true);
@@ -240,6 +241,9 @@ bool PatternConfig::Save(const std::wstring& path, const PatternConfigData& data
 
         ordered_json node;
         node["id"] = area.id;
+        if (area.type == "text") {
+            node["type"] = "text";
+        }
         node["name"] = area.name;
         node["description"] = area.description;
         node["corners"] = corners;

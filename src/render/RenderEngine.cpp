@@ -3,6 +3,11 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <set>
+#include <vector>
+#include <sstream>
+
+#include "util/StringUtil.h"
 
 namespace {
 
@@ -21,6 +26,14 @@ const wchar_t* kHudFontFace   = L"Consolas";
 
 // Black margin painted around HUD text so it stays readable over a lit area.
 const int kHudTextPadding = 6;
+
+std::string MakeQuadKey(const Quad& quad) {
+    std::ostringstream ss;
+    for (int i = 0; i < 4; ++i) {
+        ss << quad.corners[i].x << "," << quad.corners[i].y << ";";
+    }
+    return ss.str();
+}
 
 } // namespace
 
@@ -42,6 +55,8 @@ RenderEngine::RenderEngine()
     , m_scratchBits(NULL)
     , m_scratchWidth(0)
     , m_scratchHeight(0)
+    , m_gdiplusToken(0)
+    , m_fontCollection(nullptr)
 {
 }
 
@@ -84,12 +99,45 @@ bool RenderEngine::Initialize(HWND hwnd, int width, int height) {
                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, kHudFontFace);
 
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&m_gdiplusToken, &gdiplusStartupInput, NULL);
+
+    m_fontCollection = new Gdiplus::PrivateFontCollection();
+    LoadCustomFonts();
+
     std::cout << "[RenderEngine] Initialized offscreen double buffer ("
               << m_width << "x" << m_height << ")" << std::endl;
     return true;
 }
 
+void RenderEngine::ClearQuadCache() {
+    for (auto& pair : m_quadImageCache) {
+        if (pair.second.hdc) {
+            if (pair.second.hOldBitmap) SelectObject(pair.second.hdc, pair.second.hOldBitmap);
+            DeleteDC(pair.second.hdc);
+        }
+        if (pair.second.hBitmap) DeleteObject(pair.second.hBitmap);
+    }
+    m_quadImageCache.clear();
+
+    for (auto& pair : m_quadTextCache) {
+        if (pair.second.hdc) {
+            if (pair.second.hOldBitmap) SelectObject(pair.second.hdc, pair.second.hOldBitmap);
+            DeleteDC(pair.second.hdc);
+        }
+        if (pair.second.hBitmap) DeleteObject(pair.second.hBitmap);
+    }
+    m_quadTextCache.clear();
+}
+
 void RenderEngine::Cleanup() {
+    ClearQuadCache();
+
+    for (auto& pair : m_brushCache) {
+        if (pair.second) DeleteObject(pair.second);
+    }
+    m_brushCache.clear();
+
     for (auto& cached : m_pens) {
         if (cached.pen) DeleteObject(cached.pen);
     }
@@ -151,6 +199,78 @@ void RenderEngine::Cleanup() {
     m_scratchBits = NULL;
     m_scratchWidth = 0;
     m_scratchHeight = 0;
+
+    for (auto& pair : m_imageCache) {
+        if (pair.second) delete pair.second;
+    }
+    m_imageCache.clear();
+
+    if (m_fontCollection) {
+        delete m_fontCollection;
+        m_fontCollection = nullptr;
+    }
+
+    if (m_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(m_gdiplusToken);
+        m_gdiplusToken = 0;
+    }
+}
+
+void RenderEngine::LoadCustomFonts() {
+    std::vector<std::wstring> searchDirs = {
+        L"fonts",
+        L"..\\fonts",
+        L"..\\..\\fonts"
+    };
+
+    wchar_t exeBuf[MAX_PATH] = { 0 };
+    DWORD written = GetModuleFileNameW(NULL, exeBuf, MAX_PATH);
+    if (written > 0 && written < MAX_PATH) {
+        std::wstring exePath(exeBuf);
+        size_t slash = exePath.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) {
+            std::wstring exeDir = exePath.substr(0, slash);
+            searchDirs.push_back(exeDir + L"\\fonts");
+            searchDirs.push_back(exeDir + L"\\..\\fonts");
+            searchDirs.push_back(exeDir + L"\\..\\..\\fonts");
+        }
+    }
+
+    std::set<std::wstring> loadedFiles;
+
+    for (const auto& dir : searchDirs) {
+        std::wstring pattern = dir + L"\\*.*";
+        WIN32_FIND_DATAW ffd;
+        HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    std::wstring fname = ffd.cFileName;
+                    std::wstring ext;
+                    size_t dot = fname.rfind(L'.');
+                    if (dot != std::wstring::npos) {
+                        ext = fname.substr(dot);
+                        for (auto& c : ext) c = towlower(c);
+                    }
+                    if (ext == L".ttf" || ext == L".otf") {
+                        std::wstring lowerName = fname;
+                        for (auto& c : lowerName) c = towlower(c);
+                        if (loadedFiles.insert(lowerName).second) {
+                            std::wstring fullPath = dir + L"\\" + fname;
+                            AddFontResourceExW(fullPath.c_str(), FR_PRIVATE, 0);
+                            if (m_fontCollection) {
+                                Gdiplus::Status st = m_fontCollection->AddFontFile(fullPath.c_str());
+                                if (st == Gdiplus::Ok) {
+                                    std::cout << "[RenderEngine] Loaded custom font: " << WideToUtf8(fullPath) << std::endl;
+                                }
+                            }
+                        }
+                    }
+                }
+            } while (FindNextFileW(hFind, &ffd));
+            FindClose(hFind);
+        }
+    }
 }
 
 void RenderEngine::Resize(int width, int height) {
@@ -181,15 +301,402 @@ void RenderEngine::RenderBlack() {
     FillRect(m_memDC, &rect, m_blackBrush ? m_blackBrush : (HBRUSH)GetStockObject(BLACK_BRUSH));
 }
 
-void RenderEngine::RenderAreas(const std::vector<ProjectionArea>& areas) {
+void RenderEngine::DrawBackgroundVideo(const BYTE* pixels, int videoWidth, int videoHeight) {
+    if (!pixels || videoWidth <= 0 || videoHeight <= 0 || !m_memDC) return;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = videoWidth;
+    bmi.bmiHeader.biHeight = -videoHeight; // Negative for top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    SetStretchBltMode(m_memDC, COLORONCOLOR);
+    StretchDIBits(m_memDC,
+                  0, 0, m_width, m_height,
+                  0, 0, videoWidth, videoHeight,
+                  pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
+}
+
+void RenderEngine::RenderAreas(const std::vector<ProjectionArea>& areas,
+                               const BYTE* bgVideoPixels, int bgVideoWidth, int bgVideoHeight) {
     if (!m_memDC) return;
 
-    RenderBlack();
+    if (bgVideoPixels && bgVideoWidth > 0 && bgVideoHeight > 0) {
+        DrawBackgroundVideo(bgVideoPixels, bgVideoWidth, bgVideoHeight);
+    } else {
+        RenderBlack();
+    }
 
     for (const auto& area : areas) {
         if (!area.isVisible) continue;
+
+        // Text projection area: render text only, absolutely NO background fill!
+        if (area.type == "text" || !area.text.empty()) {
+            if (!area.text.empty()) {
+                DrawQuadText(area.quad, area.text, area.fontFace, area.fontSize, area.textColor);
+            }
+            continue;
+        }
+
+        if (!area.imagePath.empty()) {
+            Gdiplus::Bitmap* bmp = GetOrLoadImage(area.imagePath);
+            if (bmp) {
+                DrawQuadImage(area.quad, bmp, area.imagePath);
+                continue;
+            }
+        }
+
         FillQuad(area.quad, area.color);
     }
+}
+
+Gdiplus::Bitmap* RenderEngine::GetOrLoadImage(const std::string& path) {
+    if (path.empty() || path == "none" || path == "clear") return nullptr;
+
+    auto it = m_imageCache.find(path);
+    if (it != m_imageCache.end()) {
+        return it->second;
+    }
+
+    std::vector<std::string> candidates;
+    candidates.push_back(path);
+    candidates.push_back(path + ".jpg");
+    candidates.push_back(path + ".png");
+    candidates.push_back(path + ".jpeg");
+    candidates.push_back("images/" + path);
+    candidates.push_back("images/" + path + ".jpg");
+    candidates.push_back("images/" + path + ".png");
+    candidates.push_back("images/" + path + ".jpeg");
+    candidates.push_back("../images/" + path);
+    candidates.push_back("../images/" + path + ".jpg");
+    candidates.push_back("../images/" + path + ".png");
+    candidates.push_back("../images/" + path + ".jpeg");
+    candidates.push_back("../../images/" + path);
+    candidates.push_back("../../images/" + path + ".jpg");
+    candidates.push_back("../../images/" + path + ".png");
+
+    std::wstring foundPath;
+    for (const auto& cand : candidates) {
+        std::wstring wide = AnsiToWide(cand);
+        DWORD attr = GetFileAttributesW(wide.c_str());
+        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            foundPath = wide;
+            break;
+        }
+    }
+
+    if (foundPath.empty()) {
+        std::cerr << "[RenderEngine] ERROR: Could not locate image for '" << path << "'." << std::endl;
+        m_imageCache[path] = nullptr;
+        return nullptr;
+    }
+
+    Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromFile(foundPath.c_str());
+    if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+        std::cerr << "[RenderEngine] ERROR: Failed to decode image file: " << path << std::endl;
+        if (bitmap) delete bitmap;
+        m_imageCache[path] = nullptr;
+        return nullptr;
+    }
+
+    // Force immediate decompression of JPEG bytes into RAM buffer during preload
+    Gdiplus::Color probe;
+    bitmap->GetPixel(0, 0, &probe);
+
+    std::cout << "[RenderEngine] Loaded & pre-decoded image '" << path << "' ("
+              << bitmap->GetWidth() << "x" << bitmap->GetHeight() << ") from "
+              << WideToUtf8(foundPath) << std::endl;
+
+    m_imageCache[path] = bitmap;
+    return bitmap;
+}
+
+void RenderEngine::DrawQuadImage(const Quad& quad, Gdiplus::Bitmap* bitmap, const std::string& imagePath) {
+    if (!bitmap || !m_memDC) return;
+
+    RECT bbox = quad.BoundingBox();
+    int dstW = bbox.right - bbox.left;
+    int dstH = bbox.bottom - bbox.top;
+    if (dstW <= 0 || dstH <= 0) return;
+
+    std::string cacheKey = imagePath.empty() ? std::to_string(reinterpret_cast<uintptr_t>(bitmap)) : imagePath;
+    cacheKey += "#" + MakeQuadKey(quad);
+
+    auto it = m_quadImageCache.find(cacheKey);
+    if (it != m_quadImageCache.end()) {
+        const auto& cached = it->second;
+        if (quad.IsAxisAlignedRect()) {
+            BitBlt(m_memDC, cached.bbox.left, cached.bbox.top, cached.width, cached.height,
+                   cached.hdc, 0, 0, SRCCOPY);
+        } else {
+            POINT points[4];
+            for (int i = 0; i < 4; ++i) {
+                points[i].x = quad.corners[i].x;
+                points[i].y = quad.corners[i].y;
+            }
+            HRGN rgn = CreatePolygonRgn(points, 4, WINDING);
+            SelectClipRgn(m_memDC, rgn);
+            BitBlt(m_memDC, cached.bbox.left, cached.bbox.top, cached.width, cached.height,
+                   cached.hdc, 0, 0, SRCCOPY);
+            SelectClipRgn(m_memDC, NULL);
+            DeleteObject(rgn);
+        }
+        return;
+    }
+
+    // First time rendering: Pre-render and cache into an offscreen GDI bitmap
+    UINT imgW = bitmap->GetWidth();
+    UINT imgH = bitmap->GetHeight();
+    if (imgW == 0 || imgH == 0) return;
+
+    double targetAspect = static_cast<double>(dstW) / static_cast<double>(dstH);
+    double imgAspect = static_cast<double>(imgW) / static_cast<double>(imgH);
+
+    double srcX = 0.0;
+    double srcY = 0.0;
+    double srcW = static_cast<double>(imgW);
+    double srcH = static_cast<double>(imgH);
+
+    if (imgAspect > targetAspect) {
+        srcW = imgH * targetAspect;
+        srcX = (imgW - srcW) / 2.0;
+    } else {
+        srcH = imgW / targetAspect;
+        srcY = (imgH - srcH) / 2.0;
+    }
+
+    HDC cacheDC = CreateCompatibleDC(m_memDC);
+    HBITMAP cacheBitmap = CreateCompatibleBitmap(m_memDC, dstW, dstH);
+    HBITMAP cacheOldBitmap = (HBITMAP)SelectObject(cacheDC, cacheBitmap);
+
+    {
+        Gdiplus::Graphics graphics(cacheDC);
+        graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBilinear);
+        graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+        // Local quad points relative to bbox
+        Gdiplus::PointF localPoints[4] = {
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[0].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[0].y - bbox.top)),
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[1].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[1].y - bbox.top)),
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[2].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[2].y - bbox.top)),
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[3].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[3].y - bbox.top))
+        };
+
+        Gdiplus::GraphicsPath clipPath;
+        clipPath.AddPolygon(localPoints, 4);
+        graphics.SetClip(&clipPath);
+
+        Gdiplus::RectF dstRect(0.0f, 0.0f, static_cast<Gdiplus::REAL>(dstW), static_cast<Gdiplus::REAL>(dstH));
+        graphics.DrawImage(bitmap, dstRect,
+                           static_cast<Gdiplus::REAL>(srcX), static_cast<Gdiplus::REAL>(srcY),
+                           static_cast<Gdiplus::REAL>(srcW), static_cast<Gdiplus::REAL>(srcH),
+                           Gdiplus::UnitPixel);
+    }
+
+    CachedQuadImage entry;
+    entry.hdc = cacheDC;
+    entry.hBitmap = cacheBitmap;
+    entry.hOldBitmap = cacheOldBitmap;
+    entry.width = dstW;
+    entry.height = dstH;
+    entry.bbox = bbox;
+    m_quadImageCache[cacheKey] = entry;
+
+    if (quad.IsAxisAlignedRect()) {
+        BitBlt(m_memDC, bbox.left, bbox.top, dstW, dstH, cacheDC, 0, 0, SRCCOPY);
+    } else {
+        POINT points[4];
+        for (int i = 0; i < 4; ++i) {
+            points[i].x = quad.corners[i].x;
+            points[i].y = quad.corners[i].y;
+        }
+        HRGN rgn = CreatePolygonRgn(points, 4, WINDING);
+        SelectClipRgn(m_memDC, rgn);
+        BitBlt(m_memDC, bbox.left, bbox.top, dstW, dstH, cacheDC, 0, 0, SRCCOPY);
+        SelectClipRgn(m_memDC, NULL);
+        DeleteObject(rgn);
+    }
+}
+
+void RenderEngine::DrawQuadText(const Quad& quad, const std::string& text,
+                                const std::string& fontFace, int fontSize,
+                                COLORREF color) {
+    if (text.empty() || !m_memDC) return;
+
+    RECT bbox = quad.BoundingBox();
+    int dstW = bbox.right - bbox.left;
+    int dstH = bbox.bottom - bbox.top;
+    if (dstW <= 0 || dstH <= 0) return;
+
+    std::string cacheKey = text + "|" + fontFace + "|" + std::to_string(fontSize) + "|" +
+                           std::to_string(color) + "#" + MakeQuadKey(quad);
+
+    auto it = m_quadTextCache.find(cacheKey);
+    if (it != m_quadTextCache.end()) {
+        const auto& cached = it->second;
+        BLENDFUNCTION bf = {};
+        bf.BlendOp = AC_SRC_OVER;
+        bf.BlendFlags = 0;
+        bf.SourceConstantAlpha = 255;
+        bf.AlphaFormat = AC_SRC_ALPHA;
+
+        AlphaBlend(m_memDC, cached.bbox.left, cached.bbox.top, cached.width, cached.height,
+                   cached.hdc, 0, 0, cached.width, cached.height, bf);
+        return;
+    }
+
+    // Pre-render antialiased text into 32-bit premultiplied DIB once
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = dstW;
+    bmi.bmiHeader.biHeight = -dstH; // Top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    void* dibBits = nullptr;
+    HDC textDC = CreateCompatibleDC(m_memDC);
+    HBITMAP textBitmap = CreateDIBSection(textDC, &bmi, DIB_RGB_COLORS, &dibBits, NULL, 0);
+    HBITMAP textOldBitmap = (HBITMAP)SelectObject(textDC, textBitmap);
+
+    std::memset(dibBits, 0, static_cast<size_t>(dstW) * static_cast<size_t>(dstH) * 4);
+
+    {
+        Gdiplus::Graphics graphics(textDC);
+        graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+        // Clip locally
+        Gdiplus::PointF localPoints[4] = {
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[0].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[0].y - bbox.top)),
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[1].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[1].y - bbox.top)),
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[2].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[2].y - bbox.top)),
+            Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[3].x - bbox.left), static_cast<Gdiplus::REAL>(quad.corners[3].y - bbox.top))
+        };
+
+        Gdiplus::GraphicsPath clipPath;
+        clipPath.AddPolygon(localPoints, 4);
+        graphics.SetClip(&clipPath);
+
+        std::wstring wideFontFace = Utf8ToWide(fontFace.empty() ? "Arial" : fontFace);
+        std::wstring wideText = Utf8ToWide(text);
+
+        Gdiplus::FontFamily* family = nullptr;
+
+        if (m_fontCollection) {
+            int pfcCount = m_fontCollection->GetFamilyCount();
+            if (pfcCount > 0) {
+                std::vector<Gdiplus::FontFamily> pfcFamilies(pfcCount);
+                int numFound = 0;
+                m_fontCollection->GetFamilies(pfcCount, pfcFamilies.data(), &numFound);
+                for (int i = 0; i < numFound; ++i) {
+                    WCHAR famName[LF_FACESIZE] = {0};
+                    pfcFamilies[i].GetFamilyName(famName);
+                    std::wstring famStr(famName);
+
+                    if (_wcsicmp(famName, wideFontFace.c_str()) == 0 ||
+                        (wideFontFace.find(L"Bebas") != std::wstring::npos && famStr.find(L"Bebas") != std::wstring::npos)) {
+                        family = pfcFamilies[i].Clone();
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!family) {
+            Gdiplus::FontFamily* sysFam = new Gdiplus::FontFamily(wideFontFace.c_str());
+            if (sysFam && sysFam->IsAvailable()) {
+                family = sysFam;
+            } else {
+                delete sysFam;
+            }
+        }
+
+        if (!family || !family->IsAvailable()) {
+            delete family;
+            family = new Gdiplus::FontFamily(L"Arial");
+        }
+
+        std::string lowerFace = fontFace;
+        for (char& c : lowerFace) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
+        int fontStyle = Gdiplus::FontStyleRegular;
+        if (lowerFace.find("bold") != std::string::npos || lowerFace.find("negrita") != std::string::npos) {
+            fontStyle = Gdiplus::FontStyleBold;
+        }
+
+        if (!family->IsStyleAvailable(fontStyle)) {
+            fontStyle = Gdiplus::FontStyleRegular;
+        }
+
+        Gdiplus::StringFormat* format = Gdiplus::StringFormat::GenericTypographic()->Clone();
+        format->SetAlignment(Gdiplus::StringAlignmentCenter);
+        format->SetLineAlignment(Gdiplus::StringAlignmentCenter);
+        format->SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap | Gdiplus::StringFormatFlagsMeasureTrailingSpaces);
+
+        Gdiplus::REAL effectiveFontSize = static_cast<Gdiplus::REAL>(fontSize);
+        if (effectiveFontSize <= 0.0f) {
+            Gdiplus::REAL minPt = 8.0f;
+            Gdiplus::REAL maxPt = 350.0f;
+            Gdiplus::REAL bestPt = 32.0f;
+
+            for (int iter = 0; iter < 18; ++iter) {
+                Gdiplus::REAL midPt = (minPt + maxPt) / 2.0f;
+                Gdiplus::Font testFont(family, midPt, fontStyle, Gdiplus::UnitPoint);
+                Gdiplus::RectF bounds;
+                graphics.MeasureString(wideText.c_str(), -1, &testFont, Gdiplus::PointF(0, 0), format, &bounds);
+                if (bounds.Width <= static_cast<Gdiplus::REAL>(dstW)) {
+                    bestPt = midPt;
+                    minPt = midPt;
+                } else {
+                    maxPt = midPt;
+                }
+            }
+            effectiveFontSize = bestPt;
+        }
+
+        Gdiplus::Font font(family, effectiveFontSize, fontStyle, Gdiplus::UnitPoint);
+        delete family;
+
+        Gdiplus::RectF layoutRect(0.0f, 0.0f, static_cast<Gdiplus::REAL>(dstW), static_cast<Gdiplus::REAL>(dstH));
+        Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+
+        graphics.DrawString(wideText.c_str(), -1, &font, layoutRect, format, &brush);
+        delete format;
+    }
+
+    // Convert drawn antialiased pixels into premultiplied ARGB for fast AlphaBlend
+    uint32_t* px = static_cast<uint32_t*>(dibBits);
+    size_t totalPixels = static_cast<size_t>(dstW) * static_cast<size_t>(dstH);
+    for (size_t i = 0; i < totalPixels; ++i) {
+        uint32_t val = px[i];
+        uint32_t a = (val >> 24) & 0xFF;
+        if (a > 0 && a < 255) {
+            uint32_t r = (((val >> 16) & 0xFF) * a) / 255;
+            uint32_t g = (((val >> 8) & 0xFF) * a) / 255;
+            uint32_t b = ((val & 0xFF) * a) / 255;
+            px[i] = (a << 24) | (r << 16) | (g << 8) | b;
+        }
+    }
+
+    CachedQuadText entry;
+    entry.hdc = textDC;
+    entry.hBitmap = textBitmap;
+    entry.hOldBitmap = textOldBitmap;
+    entry.width = dstW;
+    entry.height = dstH;
+    entry.bbox = bbox;
+    m_quadTextCache[cacheKey] = entry;
+
+    BLENDFUNCTION bf = {};
+    bf.BlendOp = AC_SRC_OVER;
+    bf.BlendFlags = 0;
+    bf.SourceConstantAlpha = 255;
+    bf.AlphaFormat = AC_SRC_ALPHA;
+
+    AlphaBlend(m_memDC, bbox.left, bbox.top, dstW, dstH,
+               textDC, 0, 0, dstW, dstH, bf);
 }
 
 // ---------------------------------------------------------------------------
@@ -211,6 +718,17 @@ HPEN RenderEngine::GetPen(COLORREF color, int thickness) {
     return pen;
 }
 
+HBRUSH RenderEngine::GetSolidBrush(COLORREF color) {
+    auto it = m_brushCache.find(color);
+    if (it != m_brushCache.end()) return it->second;
+
+    HBRUSH brush = CreateSolidBrush(color);
+    if (!brush) return (HBRUSH)GetStockObject(WHITE_BRUSH);
+
+    m_brushCache[color] = brush;
+    return brush;
+}
+
 void RenderEngine::FillQuadWithBrush(const Quad& quad, HBRUSH brush) {
     POINT points[4];
     for (int i = 0; i < 4; ++i) {
@@ -228,25 +746,15 @@ void RenderEngine::FillQuadWithBrush(const Quad& quad, HBRUSH brush) {
 void RenderEngine::FillQuad(const Quad& quad, COLORREF color) {
     if (!m_memDC) return;
 
+    HBRUSH brush = (color == RGB(255, 255, 255) && m_whiteBrush) ? m_whiteBrush : GetSolidBrush(color);
+
     if (quad.IsAxisAlignedRect()) {
         RECT rect = quad.BoundingBox();
-        if (color == RGB(255, 255, 255) && m_whiteBrush) {
-            FillRect(m_memDC, &rect, m_whiteBrush);
-        } else {
-            HBRUSH brush = CreateSolidBrush(color);
-            FillRect(m_memDC, &rect, brush);
-            DeleteObject(brush);
-        }
+        FillRect(m_memDC, &rect, brush);
         return;
     }
 
-    if (color == RGB(255, 255, 255) && m_whiteBrush) {
-        FillQuadWithBrush(quad, m_whiteBrush);
-    } else {
-        HBRUSH brush = CreateSolidBrush(color);
-        FillQuadWithBrush(quad, brush);
-        DeleteObject(brush);
-    }
+    FillQuadWithBrush(quad, brush);
 }
 
 void RenderEngine::FillQuadHalftone(const Quad& quad, COLORREF color) {
@@ -287,9 +795,8 @@ void RenderEngine::DrawHandle(const Point2i& point, int halfSize, COLORREF fill,
     RECT rect = { point.x - halfSize, point.y - halfSize,
                   point.x + halfSize + 1, point.y + halfSize + 1 };
 
-    HBRUSH brush = CreateSolidBrush(fill);
+    HBRUSH brush = GetSolidBrush(fill);
     FillRect(m_memDC, &rect, brush);
-    DeleteObject(brush);
 
     HGDIOBJ oldPen   = SelectObject(m_memDC, GetPen(border, 1));
     HGDIOBJ oldBrush = SelectObject(m_memDC, GetStockObject(NULL_BRUSH));
@@ -315,16 +822,14 @@ void RenderEngine::EnsureScratchBuffer(int minWidth, int minHeight) {
     }
 
     if (m_scratchDC) {
-        if (m_scratchOldBitmap) {
-            SelectObject(m_scratchDC, m_scratchOldBitmap);
-            m_scratchOldBitmap = NULL;
-        }
+        if (m_scratchOldBitmap) SelectObject(m_scratchDC, m_scratchOldBitmap);
+        if (m_scratchBitmap) DeleteObject(m_scratchBitmap);
         DeleteDC(m_scratchDC);
         m_scratchDC = NULL;
-    }
-    if (m_scratchBitmap) {
-        DeleteObject(m_scratchBitmap);
         m_scratchBitmap = NULL;
+        m_scratchBits = NULL;
+        m_scratchWidth = 0;
+        m_scratchHeight = 0;
     }
 
     m_scratchWidth = (minWidth > m_scratchWidth) ? minWidth : m_scratchWidth;
@@ -348,7 +853,7 @@ void RenderEngine::EnsureScratchBuffer(int minWidth, int minHeight) {
 }
 
 void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF color,
-                               BYTE bgAlpha, BYTE textAlpha) {
+                              BYTE bgAlpha, BYTE textAlpha) {
     if (!m_memDC || text.empty()) return;
 
     HGDIOBJ oldFont = m_hudFont ? SelectObject(m_memDC, m_hudFont) : NULL;
@@ -380,7 +885,6 @@ void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF 
     // Select font in scratch DC
     HGDIOBJ oldScratchFont = m_hudFont ? SelectObject(m_scratchDC, m_hudFont) : NULL;
     int oldMode = SetBkMode(m_scratchDC, TRANSPARENT);
-    // Draw text in pure white so glyph antialiasing/intensity is directly readable in pixel components
     COLORREF oldColor = SetTextColor(m_scratchDC, RGB(255, 255, 255));
 
     RECT textRect = { kHudTextPadding, kHudTextPadding,
@@ -391,31 +895,23 @@ void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF 
     SetBkMode(m_scratchDC, oldMode);
     if (oldScratchFont) SelectObject(m_scratchDC, oldScratchFont);
 
-    // Color channels of the requested text color
     const int targetR = GetRValue(color);
     const int targetG = GetGValue(color);
     const int targetB = GetBValue(color);
 
-    // Compute premultiplied RGBA for each pixel in totalW x totalH
     for (int row = 0; row < totalH; ++row) {
         uint32_t* rowPx = &px[row * m_scratchWidth];
         for (int col = 0; col < totalW; ++col) {
             uint32_t val = rowPx[col];
-            // Extract glyph intensity from the white text drawing (values 0..255)
             int glyph = val & 0xFF;
 
             if (glyph == 0) {
-                // Background pixel: black backing box with bgAlpha
-                // Premultiplied black RGB is (0, 0, 0), alpha is bgAlpha
                 rowPx[col] = (static_cast<uint32_t>(bgAlpha) << 24);
             } else {
-                // Antialiased text pixel: interpolate alpha between bgAlpha and textAlpha
                 int a = bgAlpha + ((textAlpha - bgAlpha) * glyph) / 255;
-                // Unmultiplied color interpolated towards target text color
                 int r = (targetR * glyph) / 255;
                 int g = (targetG * glyph) / 255;
                 int b = (targetB * glyph) / 255;
-                // Premultiply by alpha for AC_SRC_ALPHA
                 int r_pre = (r * a) / 255;
                 int g_pre = (g * a) / 255;
                 int b_pre = (b * a) / 255;
@@ -427,7 +923,6 @@ void RenderEngine::DrawHudText(int x, int y, const std::wstring& text, COLORREF 
         }
     }
 
-    // Clip to destination surface boundaries so AlphaBlend never fails
     int srcX = 0;
     int srcY = 0;
     int dstX = x;

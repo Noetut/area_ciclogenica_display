@@ -7,6 +7,7 @@ DisplayManager::DisplayManager()
     , m_hInstance(GetModuleHandle(NULL))
     , m_width(1920)
     , m_height(1080)
+    , m_refreshRate(60)
 {
 }
 
@@ -33,6 +34,14 @@ BOOL CALLBACK DisplayManager::MonitorEnumProc(HMONITOR hMonitor, HDC, LPRECT, LP
         info.width = mi.rcMonitor.right - mi.rcMonitor.left;
         info.height = mi.rcMonitor.bottom - mi.rcMonitor.top;
         info.isPrimary = (mi.dwFlags & MONITORINFOF_PRIMARY) != 0;
+        info.refreshRate = 60;
+
+        DEVMODEW dm = {};
+        dm.dmSize = sizeof(DEVMODEW);
+        if (EnumDisplaySettingsW(mi.szDevice, ENUM_CURRENT_SETTINGS, &dm) && dm.dmDisplayFrequency > 0) {
+            info.refreshRate = static_cast<int>(dm.dmDisplayFrequency);
+        }
+
         displays->push_back(info);
     }
     return TRUE;
@@ -46,7 +55,7 @@ bool DisplayManager::EnumerateDisplays() {
     for (size_t i = 0; i < m_displays.size(); ++i) {
         const auto& d = m_displays[i];
         std::cout << "  Monitor #" << d.index 
-                  << " (" << d.width << "x" << d.height << ")"
+                  << " (" << d.width << "x" << d.height << " @ " << d.refreshRate << " Hz)"
                   << " Pos: (" << d.rect.left << ", " << d.rect.top << ")"
                   << (d.isPrimary ? " [PRIMARY]" : "") << std::endl;
     }
@@ -87,10 +96,15 @@ HWND DisplayManager::CreateWindowOnMonitor(int targetMonitorIndex, const wchar_t
         targetDisplay.rect = { 0, 0, 1920, 1080 };
         targetDisplay.width = 1920;
         targetDisplay.height = 1080;
+        targetDisplay.refreshRate = 60;
     }
 
+    m_width = targetDisplay.width;
+    m_height = targetDisplay.height;
+    m_refreshRate = targetDisplay.refreshRate > 0 ? targetDisplay.refreshRate : 60;
+
     std::cout << "[DisplayManager] Creating full black window on Monitor #" << selectedIndex 
-              << " (" << targetDisplay.width << "x" << targetDisplay.height << ")"
+              << " (" << targetDisplay.width << "x" << targetDisplay.height << " @ " << m_refreshRate << " Hz)"
               << " at (" << targetDisplay.rect.left << ", " << targetDisplay.rect.top << ")" << std::endl;
 
     const wchar_t CLASS_NAME[] = L"PatronAnimationWindowClass";
@@ -103,9 +117,6 @@ HWND DisplayManager::CreateWindowOnMonitor(int targetMonitorIndex, const wchar_t
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
 
     RegisterClassW(&wc);
-
-    m_width = targetDisplay.width;
-    m_height = targetDisplay.height;
 
     // Create a frameless borderless popup window covering the target monitor
     m_hwnd = CreateWindowExW(

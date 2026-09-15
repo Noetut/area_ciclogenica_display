@@ -13,6 +13,18 @@ videoTests/
 VideoTest/
 [Vv]ideo[Tt]est*/
 
+# Scratch and temporary files
+scratch/
+
+# Images and media assets (only keep reference pattern Patrón.png)
+images/*
+!images/Patr*n.png
+!images/Patrón.png
+!images/Patron.png
+
+# Backup files
+*.bak
+
 # IDE and Editor files
 .vscode/
 .idea/

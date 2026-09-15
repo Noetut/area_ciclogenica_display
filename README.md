@@ -34,11 +34,13 @@ cmake --build build
 ### Show & Animation Mode
 Projects calibrated geometric areas and plays text-based animation sequences at 60 FPS.
 
-| Key | Action |
+| Key / Input | Action |
 |:---|:---|
+| <kbd>Left Click</kbd> / <kbd>Enter</kbd> | Advance to next segment / trigger cue |
 | <kbd>Space</kbd> | Play / Pause animation |
 | <kbd>R</kbd> | Restart animation from frame 1 |
-| <kbd>1</kbd> – <kbd>9</kbd> | Toggle individual area ON / OFF |
+| <kbd>Tab</kbd> | Switch to next animation script |
+| <kbd>0</kbd> – <kbd>9</kbd> | Toggle individual area ON / OFF (by ID) |
 | <kbd>A</kbd> / <kbd>O</kbd> | Turn **ALL** areas ON / OFF |
 | <kbd>F1</kbd> | Enter **Calibration Mode** |
 | <kbd>Esc</kbd> | Exit application |
@@ -49,12 +51,13 @@ Interactive on-screen editor to align corners to physical real-world objects.
 | Key | Action |
 |:---|:---|
 | <kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd> | Select next / previous area |
-| <kbd>1</kbd> – <kbd>9</kbd> | Select area directly |
+| <kbd>0</kbd> – <kbd>9</kbd> | Select area directly (by ID) |
 | Numpad <kbd>7</kbd> <kbd>9</kbd> <kbd>3</kbd> <kbd>1</kbd> | Select corner: **TL** / **TR** / **BR** / **BL** |
 | Numpad <kbd>5</kbd> | Select **whole area** (moves all 4 corners) |
 | <kbd>Q</kbd> / <kbd>E</kbd> | Cycle active corner |
 | **Arrow keys** | Move 1 px (<kbd>Shift</kbd>: 10 px, <kbd>Ctrl+Shift</kbd>: 50 px) |
-| <kbd>N</kbd> / <kbd>D</kbd> | **N**ew area / **D**uplicate area |
+| <kbd>N</kbd> / <kbd>D</kbd> | **N**ew quad area / **D**uplicate area |
+| <kbd>T</kbd> / <kbd>Shift</kbd>+<kbd>T</kbd> | New **T**ext box / **T**oggle type (quad/text) |
 | <kbd>Shift</kbd>+<kbd>Delete</kbd> | Delete selected area |
 | <kbd>Ctrl+Z</kbd> / <kbd>Ctrl+S</kbd> | Undo (50 levels) / Save configuration |
 | <kbd>H</kbd> / <kbd>F1</kbd> | Toggle HUD panel / Return to Show mode |
@@ -83,7 +86,9 @@ default_step: 300ms
 100ms ON 2
 ```
 
-- **Supported commands**: `ALL_ON`, `ALL_OFF`, `ON <id>`, `OFF <id>`, `TOGGLE <id>`, `MASK <bits>`, `WAIT <duration>`.
+- **Supported commands**: `ALL_ON`, `ALL_OFF`, `ON <id>`, `OFF <id>`, `TOGGLE <id>`, `MASK <bits>`, `WAIT <duration>`, `WAIT_CLICK` (pause until left mouse click), `IMAGE <id> <name>` (render image centered and cropped inside area borders), `CLEAR_IMAGE <id/ALL>`, `CLEAR_IMAGES` / `ALL_WHITE` (clear all images and restore white solid squares), `PRELOAD <name>` (preload image into memory), `TEXT <id> [font] [size] "<text>"` (renders text with zero background, strictly inside quad boundaries), `CLEAR_TEXT <id/ALL>` (removes projected text).
+- **Headers**: `name:`, `loop: true/false`, `default_step: <duration>`, `reset_images: true` (ensures all squares start clean and white), `preload_images: <img1, img2>` (preloads and decodes images at startup for zero-delay playback).
+- **Segments / Cues**: Split your show into interactive mouse-controlled sections with `WAIT_CLICK` or `SEGMENT: <title>`.
 - **Timing**: Use `ms` (e.g. `100ms`) or `s` (e.g. `0.5s`).
 - Combine actions on the same line with `&` (e.g. `300ms ON 1 & OFF 2`).
 

@@ -2,8 +2,10 @@
 #define RENDER_ENGINE_H
 
 #include <windows.h>
+#include <gdiplus.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "model/ProjectionArea.h"
@@ -16,6 +18,7 @@ public:
     bool Initialize(HWND hwnd, int width, int height);
     void Cleanup();
     void Resize(int width, int height);
+    void ClearQuadCache();
 
     void BeginFrame();
     void EndFrame();
@@ -25,7 +28,16 @@ public:
 
     // --- Show mode --------------------------------------------------------
     void RenderBlack();
-    void RenderAreas(const std::vector<ProjectionArea>& areas);
+    void DrawBackgroundVideo(const BYTE* pixels, int videoWidth, int videoHeight);
+    void RenderAreas(const std::vector<ProjectionArea>& areas,
+                     const BYTE* bgVideoPixels = nullptr, int bgVideoWidth = 0, int bgVideoHeight = 0);
+
+    // --- Image & Text rendering ------------------------------------------
+    void DrawQuadImage(const Quad& quad, Gdiplus::Bitmap* bitmap, const std::string& imagePath = "");
+    Gdiplus::Bitmap* GetOrLoadImage(const std::string& path);
+    void DrawQuadText(const Quad& quad, const std::string& text,
+                      const std::string& fontFace = "Arial", int fontSize = 32,
+                      COLORREF color = RGB(255, 255, 255));
 
     // --- Calibration primitives -------------------------------------------
     // Solid fill. Axis-aligned quads take a FillRect fast path so that
@@ -51,9 +63,26 @@ private:
         HPEN     pen;
     };
 
-    // Pens are cached because the calibration overlay redraws every outline on
-    // every one of the 60 frames per second.
+    struct CachedQuadImage {
+        HDC     hdc = NULL;
+        HBITMAP hBitmap = NULL;
+        HBITMAP hOldBitmap = NULL;
+        int     width = 0;
+        int     height = 0;
+        RECT    bbox = { 0, 0, 0, 0 };
+    };
+
+    struct CachedQuadText {
+        HDC     hdc = NULL;
+        HBITMAP hBitmap = NULL;
+        HBITMAP hOldBitmap = NULL;
+        int     width = 0;
+        int     height = 0;
+        RECT    bbox = { 0, 0, 0, 0 };
+    };
+
     HPEN GetPen(COLORREF color, int thickness);
+    HBRUSH GetSolidBrush(COLORREF color);
     void FillQuadWithBrush(const Quad& quad, HBRUSH brush);
     void EnsureScratchBuffer(int minWidth, int minHeight);
 
@@ -67,6 +96,7 @@ private:
     HBRUSH  m_halftoneBrush;
     HFONT   m_hudFont;
     std::vector<CachedPen> m_pens;
+    std::unordered_map<COLORREF, HBRUSH> m_brushCache;
     int     m_width;
     int     m_height;
 
@@ -77,6 +107,14 @@ private:
     void*   m_scratchBits;
     int     m_scratchWidth;
     int     m_scratchHeight;
+
+    void LoadCustomFonts();
+
+    ULONG_PTR m_gdiplusToken;
+    Gdiplus::PrivateFontCollection* m_fontCollection;
+    std::unordered_map<std::string, Gdiplus::Bitmap*> m_imageCache;
+    std::unordered_map<std::string, CachedQuadImage> m_quadImageCache;
+    std::unordered_map<std::string, CachedQuadText> m_quadTextCache;
 };
 
 #endif // RENDER_ENGINE_H
