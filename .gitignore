@@ -22,11 +22,6 @@ images/*
 !images/Patrón.png
 !images/Patron.png
 
-# Animations (only sequential_wave and strobe_show kept as demos)
-animations/*
-!animations/sequential_wave.txt
-!animations/strobe_show.txt
-
 # Backup files
 *.bak
 

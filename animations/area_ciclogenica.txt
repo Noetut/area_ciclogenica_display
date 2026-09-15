@@ -1,0 +1,61 @@
+# ==============================================================================
+# Animación: Área Ciclogénica
+# Configuración de IDs:
+#   - ID 0: vinyl_mecharadio
+#   - ID 1: vinyl_cancionero
+#   - ID 2: vinyl_turboviolencia
+#   - ID 3: frame_aneto
+#   - ID 4: frame_brais_clouds
+#   - ID 5: frame_brais_eyes
+#   - ID 6: scarf_vvv
+#   - ID 7: frame_margarita
+#   - ID 8: frame_pepus
+#   - ID 9: frame_green_screen
+#   - ID 10: text_display
+#   - ID 11: text_top
+# ==============================================================================
+name: Área Ciclogénica
+loop: false
+default_step: 0.2s
+reset_images: true
+preload_images: cloud_01, Portada, talon_de_aquiles
+
+# ------------------------------------------------------------------------------
+# Segmento 1: Estado inicial
+# Todos los cuadrados en blanco (limpieza de imágenes) y únicamente la zona 9
+# (frame_green_screen) encendida.
+# Espera a clic izquierdo para avanzar.
+# ------------------------------------------------------------------------------
+CLEAR_IMAGES & ALL_OFF & ON 9
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 2:
+# Se apagan y tras 0.5s se van encendiendo de 0 a 8 una a una (0.1s cada una)
+# apagándose a continuación. Luego se proyecta la imagen cloud_01 en la zona 9.
+# ------------------------------------------------------------------------------
+0.5s ALL_OFF
+0.1s ON 0
+0.1s OFF 0 & ON 1
+0.1s OFF 1 & ON 2
+0.1s OFF 2 & ON 3
+0.1s OFF 3 & ON 4
+0.1s OFF 4 & ON 5
+0.1s OFF 5 & ON 6
+0.1s OFF 6 & ON 7
+0.1s OFF 7 & ON 8
+OFF 8 & IMAGE 9 cloud_01
+WAIT_CLICK
+
+# ------------------------------------------------------------------------------
+# Segmento 3:
+# 1. Proyectar talon_de_aquiles en zona 9
+# 2. Delay antes de que aparezca el vídeo (modificable con WAIT <segundos>, ej: WAIT 3)
+# 3. Arrancar el vídeo clouds_video de fondo y proyectar "ÁREA CICLOGÉNICA" en caja de texto (ID 11)
+#    La imagen y el texto quedan por encima del vídeo de fondo.
+# 4. Esperar a clic izquierdo.
+# ------------------------------------------------------------------------------
+IMAGE 9 talon_de_aquiles
+WAIT 3
+BG_VIDEO clouds_video & TEXT 11 "Bebas Neue Cyrillic" 100 bold "ÁREA CICLOGÉNICA"
+WAIT_CLICK
