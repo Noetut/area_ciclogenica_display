@@ -74,6 +74,8 @@ private:
     // --- Editing ----------------------------------------------------------
     void Nudge(int dx, int dy);
     void CreateArea();
+    void CreateTextArea();
+    void ToggleAreaType();
     void DuplicateArea();
     void DeleteSelectedArea();
     void ResetSelectedArea();

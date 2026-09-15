@@ -2,8 +2,10 @@
 #define RENDER_ENGINE_H
 
 #include <windows.h>
+#include <gdiplus.h>
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "model/ProjectionArea.h"
@@ -26,6 +28,13 @@ public:
     // --- Show mode --------------------------------------------------------
     void RenderBlack();
     void RenderAreas(const std::vector<ProjectionArea>& areas);
+
+    // --- Image & Text rendering ------------------------------------------
+    void DrawQuadImage(const Quad& quad, Gdiplus::Bitmap* bitmap);
+    Gdiplus::Bitmap* GetOrLoadImage(const std::string& path);
+    void DrawQuadText(const Quad& quad, const std::string& text,
+                      const std::string& fontFace = "Arial", int fontSize = 32,
+                      COLORREF color = RGB(255, 255, 255));
 
     // --- Calibration primitives -------------------------------------------
     // Solid fill. Axis-aligned quads take a FillRect fast path so that
@@ -77,6 +86,12 @@ private:
     void*   m_scratchBits;
     int     m_scratchWidth;
     int     m_scratchHeight;
+
+    void LoadCustomFonts();
+
+    ULONG_PTR m_gdiplusToken;
+    Gdiplus::PrivateFontCollection* m_fontCollection;
+    std::unordered_map<std::string, Gdiplus::Bitmap*> m_imageCache;
 };
 
 #endif // RENDER_ENGINE_H

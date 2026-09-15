@@ -32,6 +32,28 @@ bool IsDigitString(const std::string& str) {
     return true;
 }
 
+bool NextTokenOrQuoted(std::istream& is, std::string& outToken) {
+    outToken.clear();
+    char ch = 0;
+    while (is.get(ch) && (ch == ' ' || ch == '\t')) {}
+    if (!is) return false;
+
+    if (ch == '"' || ch == '\'') {
+        char quote = ch;
+        while (is.get(ch)) {
+            if (ch == quote) break;
+            outToken += ch;
+        }
+        return true;
+    } else {
+        outToken += ch;
+        while (is.get(ch) && ch != ' ' && ch != '\t' && ch != '\r' && ch != '\n') {
+            outToken += ch;
+        }
+        return true;
+    }
+}
+
 // Strip inline comments starting with '#' or '//'
 std::string StripComments(const std::string& line) {
     size_t hashPos = line.find('#');
@@ -216,6 +238,26 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
             } else if (key == "NAME") {
                 outSequence.name = val;
                 continue;
+            } else if (key == "SEGMENT" || key == "CUE") {
+                if (!outSequence.frames.empty()) {
+                    outSequence.frames.back().waitForClick = true;
+                    outSequence.frames.back().segmentName = val;
+                }
+                continue;
+            } else if (key == "RESET_IMAGES" || key == "CLEAR_IMAGES" || key == "ALL_WHITE") {
+                std::string valUpper = ToUpper(val);
+                outSequence.resetImages = (valUpper == "TRUE" || valUpper == "1" || valUpper == "YES");
+                continue;
+            } else if (key == "PRELOAD" || key == "PRELOAD_IMAGES" || key == "PRELOAD_IMAGE") {
+                std::istringstream iss(val);
+                std::string token;
+                while (iss >> token) {
+                    while (!token.empty() && (token.back() == ',' || token.back() == ';')) token.pop_back();
+                    if (!token.empty()) {
+                        outSequence.preloadImages.push_back(token);
+                    }
+                }
+                continue;
             }
         }
 
@@ -293,8 +335,8 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                 } else if (IsDigitString(arg)) {
                     AnimationAction action;
                     action.type = ActionType::TurnOn;
-                    // In scripts, user specifies 1-based index (matching UI/keyboard [1]-[9])
-                    action.targetIndex = std::stoi(arg) - 1;
+                    action.targetId = std::stoi(arg);
+                    action.targetIndex = action.targetId - 1;
                     frame.actions.push_back(action);
                 } else if (!arg.empty()) {
                     AnimationAction action;
@@ -313,7 +355,8 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                 } else if (IsDigitString(arg)) {
                     AnimationAction action;
                     action.type = ActionType::TurnOff;
-                    action.targetIndex = std::stoi(arg) - 1;
+                    action.targetId = std::stoi(arg);
+                    action.targetIndex = action.targetId - 1;
                     frame.actions.push_back(action);
                 } else if (!arg.empty()) {
                     AnimationAction action;
@@ -327,7 +370,8 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                 if (IsDigitString(arg)) {
                     AnimationAction action;
                     action.type = ActionType::Toggle;
-                    action.targetIndex = std::stoi(arg) - 1;
+                    action.targetId = std::stoi(arg);
+                    action.targetIndex = action.targetId - 1;
                     frame.actions.push_back(action);
                 } else if (!arg.empty()) {
                     AnimationAction action;
@@ -344,6 +388,139 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                     action.mask.push_back(c == '1');
                 }
                 frame.actions.push_back(action);
+            } else if (verbUpper == "IMAGE" || verbUpper == "IMG" || verbUpper == "LOAD_IMAGE") {
+                std::string target;
+                std::string imgName;
+                cs >> target >> imgName;
+                if (!target.empty()) {
+                    AnimationAction action;
+                    action.type = ActionType::SetImage;
+                    if (IsDigitString(target)) {
+                        action.targetId = std::stoi(target);
+                        action.targetIndex = action.targetId - 1;
+                    } else {
+                        action.targetName = target;
+                    }
+                    action.imagePath = imgName;
+                    frame.actions.push_back(action);
+                }
+            } else if (verbUpper == "CLEAR_IMAGE" || verbUpper == "CLEARIMAGE") {
+                std::string target;
+                cs >> target;
+                std::string targetUpper = ToUpper(target);
+                if (targetUpper == "ALL" || targetUpper == "*" || targetUpper.empty()) {
+                    AnimationAction action;
+                    action.type = ActionType::ClearAllImages;
+                    frame.actions.push_back(action);
+                } else {
+                    AnimationAction action;
+                    action.type = ActionType::ClearImage;
+                    if (IsDigitString(target)) {
+                        action.targetId = std::stoi(target);
+                        action.targetIndex = action.targetId - 1;
+                    } else {
+                        action.targetName = target;
+                    }
+                    frame.actions.push_back(action);
+                }
+            } else if (verbUpper == "CLEAR_IMAGES" || verbUpper == "CLEARALLIMAGES" ||
+                       verbUpper == "CLEAR_ALL_IMAGES" || verbUpper == "ALL_WHITE" ||
+                       verbUpper == "ALLWHITE" || verbUpper == "RESET_IMAGES") {
+                AnimationAction actionImg;
+                actionImg.type = ActionType::ClearAllImages;
+                frame.actions.push_back(actionImg);
+                AnimationAction actionTxt;
+                actionTxt.type = ActionType::ClearAllTexts;
+                frame.actions.push_back(actionTxt);
+            } else if (verbUpper == "TEXT" || verbUpper == "SET_TEXT" || verbUpper == "SETTEXT") {
+                std::string target, tok2, tok3, tok4;
+                if (NextTokenOrQuoted(cs, target)) {
+                    AnimationAction action;
+                    action.type = ActionType::SetText;
+                    if (IsDigitString(target)) {
+                        action.targetId = std::stoi(target);
+                        action.targetIndex = action.targetId - 1;
+                    } else {
+                        action.targetName = target;
+                    }
+
+                    if (NextTokenOrQuoted(cs, tok2)) {
+                        if (NextTokenOrQuoted(cs, tok3)) {
+                            if (NextTokenOrQuoted(cs, tok4)) {
+                                std::string tok5;
+                                if (NextTokenOrQuoted(cs, tok5)) {
+                                    // 4 arguments after target: font, size, style, text
+                                    action.fontFace = tok2 + " " + tok4;
+                                    if (IsDigitString(tok3)) {
+                                        action.fontSize = std::stoi(tok3);
+                                    }
+                                    action.text = tok5;
+                                } else {
+                                    // 3 arguments after target: font, size, text
+                                    action.fontFace = tok2;
+                                    if (IsDigitString(tok3)) {
+                                        action.fontSize = std::stoi(tok3);
+                                    }
+                                    action.text = tok4;
+                                }
+                            } else {
+                                // 2 arguments after target:
+                                if (IsDigitString(tok2)) {
+                                    // size, text
+                                    action.fontSize = std::stoi(tok2);
+                                    action.fontFace = "Arial";
+                                    action.text = tok3;
+                                } else if (IsDigitString(tok3)) {
+                                    // font, size, text empty
+                                    action.fontFace = tok2;
+                                    action.fontSize = std::stoi(tok3);
+                                } else {
+                                    // font, text
+                                    action.fontFace = tok2;
+                                    action.text = tok3;
+                                }
+                            }
+                        } else {
+                            // 1 argument after target: just the text
+                            action.text = tok2;
+                            action.fontFace = "Arial";
+                            action.fontSize = 32;
+                        }
+                    }
+                    frame.actions.push_back(action);
+                }
+            } else if (verbUpper == "CLEAR_TEXT" || verbUpper == "CLEARTEXT") {
+                std::string target;
+                cs >> target;
+                std::string targetUpper = ToUpper(target);
+                if (targetUpper == "ALL" || targetUpper == "*" || targetUpper.empty()) {
+                    AnimationAction action;
+                    action.type = ActionType::ClearAllTexts;
+                    frame.actions.push_back(action);
+                } else {
+                    AnimationAction action;
+                    action.type = ActionType::ClearText;
+                    if (IsDigitString(target)) {
+                        action.targetId = std::stoi(target);
+                        action.targetIndex = action.targetId - 1;
+                    } else {
+                        action.targetName = target;
+                    }
+                    frame.actions.push_back(action);
+                }
+            } else if (verbUpper == "PRELOAD" || verbUpper == "PRELOAD_IMAGE") {
+                std::string imgName;
+                cs >> imgName;
+                if (!imgName.empty()) {
+                    AnimationAction action;
+                    action.type = ActionType::PreloadImage;
+                    action.imagePath = imgName;
+                    frame.actions.push_back(action);
+                }
+            } else if (verbUpper == "WAIT_CLICK" || verbUpper == "WAITCLICK" ||
+                       verbUpper == "WAIT_FOR_CLICK" || verbUpper == "CLICK" ||
+                       verbUpper == "PAUSE_CLICK" || verbUpper == "CUE") {
+                frame.waitForClick = true;
             } else if (verbUpper == "WAIT" || verbUpper == "PAUSE" || verbUpper == "SLEEP") {
                 // Just delay, no action needed
             } else {
@@ -351,6 +528,12 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                 outError = "Line " + std::to_string(lineNumber) + ": Unknown command '" + verb + "'";
                 return false;
             }
+        }
+
+        // If this frame only contained WAIT_CLICK and no actions, attach to previous frame if available
+        if (frame.waitForClick && frame.actions.empty() && !outSequence.frames.empty()) {
+            outSequence.frames.back().waitForClick = true;
+            continue;
         }
 
         outSequence.frames.push_back(frame);

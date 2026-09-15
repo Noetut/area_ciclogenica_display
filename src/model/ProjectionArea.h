@@ -16,11 +16,19 @@ struct ProjectionArea {
     int         id;          // Stable identifier, persisted; NOT the vector index
     std::string name;
     std::string description;
+    std::string type;        // "quad" (default) or "text"
     Quad        quad;
     COLORREF    color;
     bool        isVisible;
 
-    // Reserved for the Stage 3 animation modules; not read by the renderer yet.
+    // Text rendering properties
+    std::string text;            // Text to display when type == "text" or text is set
+    std::string fontFace;        // Font family (e.g. "Arial")
+    int         fontSize;        // Font size in points (e.g. 32)
+    COLORREF    textColor;       // Color of the text glyphs
+
+    // Reserved for animation modules
+    std::string imagePath;       // Optional image path / name to display instead of solid fill
     float opacity;
     bool  isBlinking;
     float blinkRate;
@@ -28,9 +36,13 @@ struct ProjectionArea {
 
     ProjectionArea()
         : id(0)
+        , type("quad")
         , quad(Quad::FromRect(0, 0, 100, 100))
         , color(RGB(255, 255, 255))
         , isVisible(true)
+        , fontFace("Arial")
+        , fontSize(32)
+        , textColor(RGB(255, 255, 255))
         , opacity(1.0f)
         , isBlinking(false)
         , blinkRate(1.0f)
@@ -50,6 +62,7 @@ inline bool SameAsPersisted(const ProjectionArea& a, const ProjectionArea& b) {
     return a.id == b.id &&
            a.name == b.name &&
            a.description == b.description &&
+           a.type == b.type &&
            a.color == b.color &&
            a.isVisible == b.isVisible;
 }

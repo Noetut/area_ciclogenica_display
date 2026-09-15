@@ -7,7 +7,7 @@
     },
     "areas": [
         {
-            "id": 0,
+            "id": 2,
             "name": "vinyl_turboviolencia",
             "description": "Left column, top square",
             "corners": [
@@ -65,7 +65,7 @@
             "visible": true
         },
         {
-            "id": 2,
+            "id": 0,
             "name": "vinyl_mecharadio",
             "description": "Left column, bottom square",
             "corners": [
@@ -181,7 +181,7 @@
             "visible": true
         },
         {
-            "id": 6,
+            "id": 9,
             "name": "frame_green_screen",
             "description": "Lower group, left rectangle",
             "corners": [
@@ -210,7 +210,7 @@
             "visible": true
         },
         {
-            "id": 7,
+            "id": 8,
             "name": "frame_pepus",
             "description": "Lower group, middle rectangle",
             "corners": [
@@ -239,7 +239,7 @@
             "visible": true
         },
         {
-            "id": 8,
+            "id": 7,
             "name": "frame_margarita",
             "description": "Lower group, right rectangle",
             "corners": [
@@ -268,7 +268,7 @@
             "visible": true
         },
         {
-            "id": 9,
+            "id": 6,
             "name": "scarf_vvv",
             "description": "Left stripe, top to bottom",
             "corners": [
@@ -287,6 +287,66 @@
                 {
                     "x": 1546,
                     "y": 968
+                }
+            ],
+            "color": [
+                255,
+                255,
+                255
+            ],
+            "visible": true
+        },
+        {
+            "id": 10,
+            "type": "text",
+            "name": "text_display",
+            "description": "Text projection box",
+            "corners": [
+                {
+                    "x": 600,
+                    "y": 820
+                },
+                {
+                    "x": 1400,
+                    "y": 820
+                },
+                {
+                    "x": 1400,
+                    "y": 980
+                },
+                {
+                    "x": 600,
+                    "y": 980
+                }
+            ],
+            "color": [
+                255,
+                255,
+                255
+            ],
+            "visible": false
+        },
+        {
+            "id": 11,
+            "type": "text",
+            "name": "area_11",
+            "description": "Created in calibration mode",
+            "corners": [
+                {
+                    "x": 464,
+                    "y": 47
+                },
+                {
+                    "x": 1474,
+                    "y": 47
+                },
+                {
+                    "x": 1474,
+                    "y": 197
+                },
+                {
+                    "x": 464,
+                    "y": 197
                 }
             ],
             "color": [

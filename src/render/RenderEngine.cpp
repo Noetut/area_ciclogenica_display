@@ -3,6 +3,10 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <set>
+#include <vector>
+
+#include "util/StringUtil.h"
 
 namespace {
 
@@ -42,6 +46,8 @@ RenderEngine::RenderEngine()
     , m_scratchBits(NULL)
     , m_scratchWidth(0)
     , m_scratchHeight(0)
+    , m_gdiplusToken(0)
+    , m_fontCollection(nullptr)
 {
 }
 
@@ -83,6 +89,12 @@ bool RenderEngine::Initialize(HWND hwnd, int width, int height) {
     m_hudFont = CreateFontW(kHudFontHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                             CLEARTYPE_QUALITY, FIXED_PITCH | FF_MODERN, kHudFontFace);
+
+    Gdiplus::GdiplusStartupInput gdiplusStartupInput;
+    Gdiplus::GdiplusStartup(&m_gdiplusToken, &gdiplusStartupInput, NULL);
+
+    m_fontCollection = new Gdiplus::PrivateFontCollection();
+    LoadCustomFonts();
 
     std::cout << "[RenderEngine] Initialized offscreen double buffer ("
               << m_width << "x" << m_height << ")" << std::endl;
@@ -151,6 +163,78 @@ void RenderEngine::Cleanup() {
     m_scratchBits = NULL;
     m_scratchWidth = 0;
     m_scratchHeight = 0;
+
+    for (auto& pair : m_imageCache) {
+        if (pair.second) delete pair.second;
+    }
+    m_imageCache.clear();
+
+    if (m_fontCollection) {
+        delete m_fontCollection;
+        m_fontCollection = nullptr;
+    }
+
+    if (m_gdiplusToken) {
+        Gdiplus::GdiplusShutdown(m_gdiplusToken);
+        m_gdiplusToken = 0;
+    }
+}
+
+void RenderEngine::LoadCustomFonts() {
+    std::vector<std::wstring> searchDirs = {
+        L"fonts",
+        L"..\\fonts",
+        L"..\\..\\fonts"
+    };
+
+    wchar_t exeBuf[MAX_PATH] = { 0 };
+    DWORD written = GetModuleFileNameW(NULL, exeBuf, MAX_PATH);
+    if (written > 0 && written < MAX_PATH) {
+        std::wstring exePath(exeBuf);
+        size_t slash = exePath.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) {
+            std::wstring exeDir = exePath.substr(0, slash);
+            searchDirs.push_back(exeDir + L"\\fonts");
+            searchDirs.push_back(exeDir + L"\\..\\fonts");
+            searchDirs.push_back(exeDir + L"\\..\\..\\fonts");
+        }
+    }
+
+    std::set<std::wstring> loadedFiles;
+
+    for (const auto& dir : searchDirs) {
+        std::wstring pattern = dir + L"\\*.*";
+        WIN32_FIND_DATAW ffd;
+        HANDLE hFind = FindFirstFileW(pattern.c_str(), &ffd);
+        if (hFind != INVALID_HANDLE_VALUE) {
+            do {
+                if (!(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                    std::wstring fname = ffd.cFileName;
+                    std::wstring ext;
+                    size_t dot = fname.rfind(L'.');
+                    if (dot != std::wstring::npos) {
+                        ext = fname.substr(dot);
+                        for (auto& c : ext) c = towlower(c);
+                    }
+                    if (ext == L".ttf" || ext == L".otf") {
+                        std::wstring lowerName = fname;
+                        for (auto& c : lowerName) c = towlower(c);
+                        if (loadedFiles.insert(lowerName).second) {
+                            std::wstring fullPath = dir + L"\\" + fname;
+                            AddFontResourceExW(fullPath.c_str(), FR_PRIVATE, 0);
+                            if (m_fontCollection) {
+                                Gdiplus::Status st = m_fontCollection->AddFontFile(fullPath.c_str());
+                                if (st == Gdiplus::Ok) {
+                                    std::cout << "[RenderEngine] Loaded custom font: " << WideToUtf8(fullPath) << std::endl;
+                                }
+                            }
+                        }
+                    }
+                }
+            } while (FindNextFileW(hFind, &ffd));
+            FindClose(hFind);
+        }
+    }
 }
 
 void RenderEngine::Resize(int width, int height) {
@@ -188,8 +272,265 @@ void RenderEngine::RenderAreas(const std::vector<ProjectionArea>& areas) {
 
     for (const auto& area : areas) {
         if (!area.isVisible) continue;
+
+        // Text projection area: render text only, absolutely NO background fill!
+        if (area.type == "text" || !area.text.empty()) {
+            if (!area.text.empty()) {
+                DrawQuadText(area.quad, area.text, area.fontFace, area.fontSize, area.textColor);
+            }
+            continue;
+        }
+
+        if (!area.imagePath.empty()) {
+            Gdiplus::Bitmap* bmp = GetOrLoadImage(area.imagePath);
+            if (bmp) {
+                DrawQuadImage(area.quad, bmp);
+                continue;
+            }
+        }
+
         FillQuad(area.quad, area.color);
     }
+}
+
+Gdiplus::Bitmap* RenderEngine::GetOrLoadImage(const std::string& path) {
+    if (path.empty() || path == "none" || path == "clear") return nullptr;
+
+    auto it = m_imageCache.find(path);
+    if (it != m_imageCache.end()) {
+        return it->second;
+    }
+
+    std::vector<std::string> candidates;
+    candidates.push_back(path);
+    candidates.push_back(path + ".jpg");
+    candidates.push_back(path + ".png");
+    candidates.push_back(path + ".jpeg");
+    candidates.push_back("images/" + path);
+    candidates.push_back("images/" + path + ".jpg");
+    candidates.push_back("images/" + path + ".png");
+    candidates.push_back("images/" + path + ".jpeg");
+    candidates.push_back("../images/" + path);
+    candidates.push_back("../images/" + path + ".jpg");
+    candidates.push_back("../images/" + path + ".png");
+    candidates.push_back("../images/" + path + ".jpeg");
+    candidates.push_back("../../images/" + path);
+    candidates.push_back("../../images/" + path + ".jpg");
+    candidates.push_back("../../images/" + path + ".png");
+
+    std::wstring foundPath;
+    for (const auto& cand : candidates) {
+        std::wstring wide = AnsiToWide(cand);
+        DWORD attr = GetFileAttributesW(wide.c_str());
+        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            foundPath = wide;
+            break;
+        }
+    }
+
+    if (foundPath.empty()) {
+        std::cerr << "[RenderEngine] ERROR: Could not locate image for '" << path << "'." << std::endl;
+        m_imageCache[path] = nullptr;
+        return nullptr;
+    }
+
+    Gdiplus::Bitmap* bitmap = Gdiplus::Bitmap::FromFile(foundPath.c_str());
+    if (!bitmap || bitmap->GetLastStatus() != Gdiplus::Ok) {
+        std::cerr << "[RenderEngine] ERROR: Failed to decode image file: " << path << std::endl;
+        if (bitmap) delete bitmap;
+        m_imageCache[path] = nullptr;
+        return nullptr;
+    }
+
+    // Force immediate decompression of JPEG bytes into RAM buffer during preload
+    Gdiplus::Color probe;
+    bitmap->GetPixel(0, 0, &probe);
+
+    std::cout << "[RenderEngine] Loaded & pre-decoded image '" << path << "' ("
+              << bitmap->GetWidth() << "x" << bitmap->GetHeight() << ") from "
+              << WideToUtf8(foundPath) << std::endl;
+
+    m_imageCache[path] = bitmap;
+    return bitmap;
+}
+
+void RenderEngine::DrawQuadImage(const Quad& quad, Gdiplus::Bitmap* bitmap) {
+    if (!bitmap || !m_memDC) return;
+
+    UINT imgW = bitmap->GetWidth();
+    UINT imgH = bitmap->GetHeight();
+    if (imgW == 0 || imgH == 0) return;
+
+    RECT bbox = quad.BoundingBox();
+    int dstW = bbox.right - bbox.left;
+    int dstH = bbox.bottom - bbox.top;
+    if (dstW <= 0 || dstH <= 0) return;
+
+    // Center-crop (cover) calculation to maintain aspect ratio and fit in the middle
+    double targetAspect = static_cast<double>(dstW) / static_cast<double>(dstH);
+    double imgAspect = static_cast<double>(imgW) / static_cast<double>(imgH);
+
+    double srcX = 0.0;
+    double srcY = 0.0;
+    double srcW = static_cast<double>(imgW);
+    double srcH = static_cast<double>(imgH);
+
+    if (imgAspect > targetAspect) {
+        // Image is wider than target quad: crop the sides evenly
+        srcW = imgH * targetAspect;
+        srcX = (imgW - srcW) / 2.0;
+    } else {
+        // Image is taller than target quad: crop top and bottom evenly
+        srcH = imgW / targetAspect;
+        srcY = (imgH - srcH) / 2.0;
+    }
+
+    Gdiplus::Graphics graphics(m_memDC);
+    graphics.SetInterpolationMode(Gdiplus::InterpolationModeHighQualityBicubic);
+    graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+    // Strictly clip to the 4 corners of the quad to respect calibrated borders
+    Gdiplus::PointF polyPoints[4] = {
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[0].x), static_cast<Gdiplus::REAL>(quad.corners[0].y)),
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[1].x), static_cast<Gdiplus::REAL>(quad.corners[1].y)),
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[2].x), static_cast<Gdiplus::REAL>(quad.corners[2].y)),
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[3].x), static_cast<Gdiplus::REAL>(quad.corners[3].y))
+    };
+
+    Gdiplus::GraphicsPath clipPath;
+    clipPath.AddPolygon(polyPoints, 4);
+    graphics.SetClip(&clipPath);
+
+    Gdiplus::RectF dstRect(static_cast<Gdiplus::REAL>(bbox.left),
+                           static_cast<Gdiplus::REAL>(bbox.top),
+                           static_cast<Gdiplus::REAL>(dstW),
+                           static_cast<Gdiplus::REAL>(dstH));
+
+    graphics.DrawImage(bitmap, dstRect,
+                       static_cast<Gdiplus::REAL>(srcX), static_cast<Gdiplus::REAL>(srcY),
+                       static_cast<Gdiplus::REAL>(srcW), static_cast<Gdiplus::REAL>(srcH),
+                       Gdiplus::UnitPixel);
+}
+
+void RenderEngine::DrawQuadText(const Quad& quad, const std::string& text,
+                                const std::string& fontFace, int fontSize,
+                                COLORREF color) {
+    if (text.empty() || !m_memDC) return;
+
+    RECT bbox = quad.BoundingBox();
+    int dstW = bbox.right - bbox.left;
+    int dstH = bbox.bottom - bbox.top;
+    if (dstW <= 0 || dstH <= 0) return;
+
+    Gdiplus::Graphics graphics(m_memDC);
+    graphics.SetTextRenderingHint(Gdiplus::TextRenderingHintAntiAliasGridFit);
+
+    // Strictly clip to the 4 corners of the quad to respect calibrated borders
+    Gdiplus::PointF polyPoints[4] = {
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[0].x), static_cast<Gdiplus::REAL>(quad.corners[0].y)),
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[1].x), static_cast<Gdiplus::REAL>(quad.corners[1].y)),
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[2].x), static_cast<Gdiplus::REAL>(quad.corners[2].y)),
+        Gdiplus::PointF(static_cast<Gdiplus::REAL>(quad.corners[3].x), static_cast<Gdiplus::REAL>(quad.corners[3].y))
+    };
+
+    Gdiplus::GraphicsPath clipPath;
+    clipPath.AddPolygon(polyPoints, 4);
+    graphics.SetClip(&clipPath);
+
+    std::wstring wideFontFace = Utf8ToWide(fontFace.empty() ? "Arial" : fontFace);
+    std::wstring wideText = Utf8ToWide(text);
+
+    Gdiplus::FontFamily* family = nullptr;
+
+    // 1. Search in custom private font collection
+    if (m_fontCollection) {
+        int pfcCount = m_fontCollection->GetFamilyCount();
+        if (pfcCount > 0) {
+            std::vector<Gdiplus::FontFamily> pfcFamilies(pfcCount);
+            int numFound = 0;
+            m_fontCollection->GetFamilies(pfcCount, pfcFamilies.data(), &numFound);
+            for (int i = 0; i < numFound; ++i) {
+                WCHAR famName[LF_FACESIZE] = {0};
+                pfcFamilies[i].GetFamilyName(famName);
+                std::wstring famStr(famName);
+
+                if (_wcsicmp(famName, wideFontFace.c_str()) == 0 ||
+                    (wideFontFace.find(L"Bebas") != std::wstring::npos && famStr.find(L"Bebas") != std::wstring::npos)) {
+                    family = pfcFamilies[i].Clone();
+                    break;
+                }
+            }
+        }
+    }
+
+    // 2. Search in system installed fonts
+    if (!family) {
+        Gdiplus::FontFamily* sysFam = new Gdiplus::FontFamily(wideFontFace.c_str());
+        if (sysFam && sysFam->IsAvailable()) {
+            family = sysFam;
+        } else {
+            delete sysFam;
+        }
+    }
+
+    // 3. Fallback
+    if (!family || !family->IsAvailable()) {
+        delete family;
+        family = new Gdiplus::FontFamily(L"Arial");
+    }
+
+    std::string lowerFace = fontFace;
+    for (char& c : lowerFace) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
+
+    int fontStyle = Gdiplus::FontStyleRegular;
+    if (lowerFace.find("bold") != std::string::npos || lowerFace.find("negrita") != std::string::npos) {
+        fontStyle = Gdiplus::FontStyleBold;
+    }
+
+    if (!family->IsStyleAvailable(fontStyle)) {
+        fontStyle = Gdiplus::FontStyleRegular;
+    }
+
+    Gdiplus::StringFormat* format = Gdiplus::StringFormat::GenericTypographic()->Clone();
+    format->SetAlignment(Gdiplus::StringAlignmentCenter);
+    format->SetLineAlignment(Gdiplus::StringAlignmentCenter);
+    format->SetFormatFlags(Gdiplus::StringFormatFlagsNoWrap | Gdiplus::StringFormatFlagsMeasureTrailingSpaces);
+
+    Gdiplus::REAL effectiveFontSize = static_cast<Gdiplus::REAL>(fontSize);
+    if (effectiveFontSize <= 0.0f) {
+        // Auto-size: binary search font size in UnitPoint so text fills dstW
+        Gdiplus::REAL minPt = 8.0f;
+        Gdiplus::REAL maxPt = 350.0f;
+        Gdiplus::REAL bestPt = 32.0f;
+
+        for (int iter = 0; iter < 18; ++iter) {
+            Gdiplus::REAL midPt = (minPt + maxPt) / 2.0f;
+            Gdiplus::Font testFont(family, midPt, fontStyle, Gdiplus::UnitPoint);
+            Gdiplus::RectF bounds;
+            graphics.MeasureString(wideText.c_str(), -1, &testFont, Gdiplus::PointF(0, 0), format, &bounds);
+            if (bounds.Width <= static_cast<Gdiplus::REAL>(dstW)) {
+                bestPt = midPt;
+                minPt = midPt;
+            } else {
+                maxPt = midPt;
+            }
+        }
+        effectiveFontSize = bestPt;
+    }
+
+    Gdiplus::Font font(family, effectiveFontSize, fontStyle, Gdiplus::UnitPoint);
+    delete family;
+
+    Gdiplus::RectF layoutRect(static_cast<Gdiplus::REAL>(bbox.left),
+                              static_cast<Gdiplus::REAL>(bbox.top),
+                              static_cast<Gdiplus::REAL>(dstW),
+                              static_cast<Gdiplus::REAL>(dstH));
+
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color), GetBValue(color)));
+
+    graphics.DrawString(wideText.c_str(), -1, &font, layoutRect, format, &brush);
+
+    delete format;
 }
 
 // ---------------------------------------------------------------------------
@@ -315,16 +656,14 @@ void RenderEngine::EnsureScratchBuffer(int minWidth, int minHeight) {
     }
 
     if (m_scratchDC) {
-        if (m_scratchOldBitmap) {
-            SelectObject(m_scratchDC, m_scratchOldBitmap);
-            m_scratchOldBitmap = NULL;
-        }
+        if (m_scratchOldBitmap) SelectObject(m_scratchDC, m_scratchOldBitmap);
+        if (m_scratchBitmap) DeleteObject(m_scratchBitmap);
         DeleteDC(m_scratchDC);
         m_scratchDC = NULL;
-    }
-    if (m_scratchBitmap) {
-        DeleteObject(m_scratchBitmap);
         m_scratchBitmap = NULL;
+        m_scratchBits = NULL;
+        m_scratchWidth = 0;
+        m_scratchHeight = 0;
     }
 
     m_scratchWidth = (minWidth > m_scratchWidth) ? minWidth : m_scratchWidth;

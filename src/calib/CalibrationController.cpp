@@ -226,6 +226,36 @@ void CalibrationController::CreateArea() {
     std::cout << "[Calibration] " << m_statusMessage << std::endl;
 }
 
+void CalibrationController::CreateTextArea() {
+    if (!m_grid) return;
+
+    PushUndo();
+    m_selectedIndex = m_grid->CreateTextArea(m_canvasWidth, m_canvasHeight);
+    m_selectedCorner = WHOLE_AREA;
+    RecomputeDirty();
+
+    const ProjectionArea* area = m_grid->GetArea(m_selectedIndex);
+    m_statusMessage = area ? ("Created text box " + area->name) : "Created text box.";
+    std::cout << "[Calibration] " << m_statusMessage << std::endl;
+}
+
+void CalibrationController::ToggleAreaType() {
+    if (!m_grid) return;
+    ProjectionArea* area = m_grid->GetArea(m_selectedIndex);
+    if (!area) return;
+
+    PushUndo();
+    if (area->type == "text") {
+        area->type = "quad";
+        m_statusMessage = "Converted " + area->name + " to QUAD";
+    } else {
+        area->type = "text";
+        m_statusMessage = "Converted " + area->name + " to TEXT BOX";
+    }
+    RecomputeDirty();
+    std::cout << "[Calibration] " << m_statusMessage << std::endl;
+}
+
 void CalibrationController::DuplicateArea() {
     if (!m_grid) return;
 
@@ -358,6 +388,13 @@ bool CalibrationController::HandleKey(WPARAM key, bool shift, bool ctrl) {
 
     // --- Lifecycle --------------------------------------------------------
     case 'N': CreateArea(); return true;
+    case 'T':
+        if (shift) {
+            ToggleAreaType();
+        } else {
+            CreateTextArea();
+        }
+        return true;
     case 'D': DuplicateArea(); return true;
 
     case VK_DELETE:
@@ -390,14 +427,18 @@ bool CalibrationController::HandleKey(WPARAM key, bool shift, bool ctrl) {
         break;
     }
 
-    // Digits 1-9 select an area directly by index.
-    if (key >= '1' && key <= '9') {
-        const int index = static_cast<int>(key - '1');
-        if (m_grid && index < static_cast<int>(m_grid->GetCount())) {
+    // Digits 0-9 select an area directly by ID or index.
+    if (key >= '0' && key <= '9') {
+        const int id = static_cast<int>(key - '0');
+        int index = m_grid ? m_grid->FindIndexById(id) : -1;
+        if (index < 0 && id > 0) {
+            index = id - 1; // legacy fallback
+        }
+        if (m_grid && index >= 0 && index < static_cast<int>(m_grid->GetCount())) {
             m_selectedIndex = index;
             m_statusMessage.clear();
         } else {
-            m_statusMessage = "No area at index " + std::to_string(index) + ".";
+            m_statusMessage = "No area with ID " + std::to_string(id) + ".";
         }
         return true;
     }
@@ -431,7 +472,8 @@ std::wstring CalibrationController::BuildHudText() const {
     } else {
         RECT bbox = area->quad.BoundingBox();
         out << "Area " << (m_selectedIndex + 1) << "/" << count
-            << "   id " << area->id << "   " << area->name << "\n"
+            << "   id " << area->id << "   " << area->name
+            << (area->type == "text" ? "   [TEXT BOX]" : "") << "\n"
             << "Target: " << CornerName(m_selectedCorner);
 
         if (m_selectedCorner != WHOLE_AREA) {
@@ -460,11 +502,11 @@ std::wstring CalibrationController::BuildHudText() const {
 
     out << "\n"
         << "Tab / Shift+Tab  previous / next area\n"
-        << "1-9              select area by index\n"
+        << "0-9              select area by ID\n"
         << "Num 7 9 3 1      corner TL TR BR BL      Num 5  whole area\n"
         << "Q / E            cycle corner\n"
         << "Arrows           move target\n"
-        << "N new   D duplicate   Shift+Del delete\n"
+        << "N new quad   T new text box   Shift+T toggle type   D duplicate   Shift+Del delete\n"
         << "Ctrl+Z undo   R reset area   Ctrl+S save   L reload\n";
 
     if (!m_statusMessage.empty()) {
