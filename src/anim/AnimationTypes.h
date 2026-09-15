@@ -20,7 +20,9 @@ enum class ActionType {
     ClearText,
     ClearAllTexts,
     SetBackgroundVideo,
-    StopBackgroundVideo
+    StopBackgroundVideo,
+    Palpitate,
+    StopPalpitate
 };
 
 struct AnimationAction {
@@ -35,6 +37,10 @@ struct AnimationAction {
     int         fontSize = 32;      // Font size in points
     COLORREF    textColor = RGB(255, 255, 255); // Color of text glyphs
     std::vector<bool> mask;         // Used for SetMask
+    std::vector<int> targetIds;     // Multiple target IDs for bulk commands like Palpitate
+    float       minBrightness = 0.5f; // Min brightness for Palpitate (0.0 to 1.0)
+    float       maxBrightness = 1.0f; // Max brightness for Palpitate (0.0 to 1.0)
+    float       frequency = 1.2f;     // Frequency in Hz for Palpitate (smooth breathing pace)
 };
 
 struct AnimationFrame {

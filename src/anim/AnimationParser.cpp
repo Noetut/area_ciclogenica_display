@@ -602,6 +602,60 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                 AnimationAction action;
                 action.type = ActionType::StopBackgroundVideo;
                 frame.actions.push_back(action);
+            } else if (verbUpper == "PALPITATE" || verbUpper == "PULSE" || verbUpper == "PALPITA") {
+                AnimationAction action;
+                action.type = ActionType::Palpitate;
+                action.minBrightness = 0.5f;
+                action.maxBrightness = 1.0f;
+                action.frequency = 1.2f;
+
+                std::string tok;
+                bool hasMin = false;
+                while (cs >> tok) {
+                    std::string tokUpper = ToUpper(tok);
+                    if (tokUpper == "STOP" || tokUpper == "OFF") {
+                        action.type = ActionType::StopPalpitate;
+                        break;
+                    }
+                    if (tokUpper == "ALL" || tokUpper == "*") {
+                        action.targetId = -2; // Sentinel for ALL
+                        continue;
+                    }
+                    if (!tok.empty() && tok.back() == '%') {
+                        std::string numPart = tok.substr(0, tok.size() - 1);
+                        try {
+                            float pct = std::stof(numPart) / 100.0f;
+                            if (!hasMin) {
+                                action.minBrightness = pct;
+                                hasMin = true;
+                            } else {
+                                action.maxBrightness = pct;
+                            }
+                        } catch (...) {}
+                        continue;
+                    }
+                    if (tok.size() > 2 && (tokUpper.rfind("HZ") == tok.size() - 2)) {
+                        std::string numPart = tok.substr(0, tok.size() - 2);
+                        try {
+                            action.frequency = std::stof(numPart);
+                        } catch (...) {}
+                        continue;
+                    }
+                    if (IsDigitString(tok)) {
+                        action.targetIds.push_back(std::stoi(tok));
+                    } else {
+                        action.targetName = tok;
+                    }
+                }
+                if (action.minBrightness > action.maxBrightness) {
+                    std::swap(action.minBrightness, action.maxBrightness);
+                }
+                frame.actions.push_back(action);
+            } else if (verbUpper == "STOP_PALPITATE" || verbUpper == "STOPPALPITATE" ||
+                       verbUpper == "STOP_PULSE" || verbUpper == "STOPPULSE") {
+                AnimationAction action;
+                action.type = ActionType::StopPalpitate;
+                frame.actions.push_back(action);
             } else if (verbUpper == "WAIT_CLICK" || verbUpper == "WAITCLICK" ||
                        verbUpper == "WAIT_FOR_CLICK" || verbUpper == "CLICK" ||
                        verbUpper == "PAUSE_CLICK" || verbUpper == "CUE") {

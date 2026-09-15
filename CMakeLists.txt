@@ -49,7 +49,7 @@ if(MINGW)
         PROPERTIES COMPILE_OPTIONS "-Wa,-mbig-obj")
 endif()
 
-# Link Win32 libraries: gdi32 (GDI graphics), user32 (Windowing & Monitor API), msimg32 (AlphaBlend), gdiplus (Image loading & rendering), Media Foundation (video playback)
-target_link_libraries(PatronAnimation PRIVATE gdi32 user32 msimg32 gdiplus mfplat mfreadwrite mfuuid ole32)
+# Link Win32 libraries: gdi32 (GDI graphics), user32 (Windowing & Monitor API), msimg32 (AlphaBlend), gdiplus (Image loading & rendering), Media Foundation (video playback), winmm (precise timer)
+target_link_libraries(PatronAnimation PRIVATE gdi32 user32 msimg32 gdiplus mfplat mfreadwrite mfuuid ole32 winmm)
 
 message(STATUS "Configured PatronAnimation target for Win32 build.")

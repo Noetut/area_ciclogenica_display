@@ -49,6 +49,17 @@ public:
 private:
     void ApplyFrame(const AnimationFrame& frame, PatternGrid& grid);
 
+    struct ActivePalpitation {
+        std::vector<int> areaIndices;
+        float minBrightness = 0.5f;
+        float maxBrightness = 1.0f;
+        float frequency = 1.2f;
+        double timer = 0.0;
+    };
+
+    void UpdatePalpitations(double deltaTime, PatternGrid& grid);
+    void ClearPalpitations(PatternGrid& grid);
+
     VideoPlayer       m_videoPlayer;
     AnimationSequence m_sequence;
     std::string       m_filePath;
@@ -57,6 +68,7 @@ private:
     bool              m_isPlaying;
     bool              m_isWaitingForClick;
     bool              m_frameApplied;
+    std::vector<ActivePalpitation> m_activePalpitations;
 };
 
 #endif // ANIMATION_CONTROLLER_H

@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <vector>
+#include <cmath>
 #include <windows.h>
 #include "AnimationParser.h"
 #include "model/PatternGrid.h"
@@ -93,10 +94,12 @@ void AnimationController::Stop() {
     m_currentFrameIndex = 0;
     m_frameTimer = 0.0;
     m_videoPlayer.Stop();
+    m_activePalpitations.clear();
 }
 
 void AnimationController::Restart(PatternGrid& grid) {
     if (m_sequence.Empty()) return;
+    ClearPalpitations(grid);
     m_videoPlayer.Close();
     if (m_sequence.resetImages) {
         grid.ClearAllImages();
@@ -153,6 +156,10 @@ void AnimationController::TriggerClick(PatternGrid& grid) {
 void AnimationController::Update(double deltaTime, PatternGrid& grid) {
     if (m_videoPlayer.IsPlaying()) {
         m_videoPlayer.Update(deltaTime);
+    }
+
+    if (!m_activePalpitations.empty()) {
+        UpdatePalpitations(deltaTime, grid);
     }
 
     if (!m_isPlaying || m_sequence.Empty()) return;
@@ -270,15 +277,19 @@ void AnimationController::ApplyFrame(const AnimationFrame& frame, PatternGrid& g
         switch (action.type) {
         case ActionType::AllOn:
             grid.SetAllVisible(true);
+            ClearPalpitations(grid);
+            grid.SetAllColor(RGB(255, 255, 255));
             break;
 
         case ActionType::AllOff:
             grid.SetAllVisible(false);
+            ClearPalpitations(grid);
             break;
 
         case ActionType::TurnOn: {
             int idx = ResolveTargetIndex(action, grid);
             if (idx >= 0 && idx < static_cast<int>(grid.GetCount())) {
+                grid.SetAreaColor(idx, RGB(255, 255, 255));
                 grid.SetAreaVisible(idx, true);
             }
             break;
@@ -370,6 +381,78 @@ void AnimationController::ApplyFrame(const AnimationFrame& frame, PatternGrid& g
             m_videoPlayer.Close();
             break;
         }
+
+        case ActionType::Palpitate: {
+            ActivePalpitation palp;
+            palp.minBrightness = action.minBrightness;
+            palp.maxBrightness = action.maxBrightness;
+            palp.frequency = action.frequency > 0.0f ? action.frequency : 1.2f;
+            palp.timer = 0.0;
+
+            if (action.targetId == -2) { // ALL
+                for (size_t i = 0; i < grid.GetCount(); ++i) {
+                    palp.areaIndices.push_back(static_cast<int>(i));
+                    grid.SetAreaVisible(static_cast<int>(i), true);
+                }
+            } else {
+                for (int id : action.targetIds) {
+                    int idx = grid.FindIndexById(id);
+                    if (idx >= 0 && idx < static_cast<int>(grid.GetCount())) {
+                        palp.areaIndices.push_back(idx);
+                        grid.SetAreaVisible(idx, true);
+                    }
+                }
+                if (!action.targetName.empty()) {
+                    int idx = grid.FindIndexByName(action.targetName);
+                    if (idx >= 0 && idx < static_cast<int>(grid.GetCount())) {
+                        palp.areaIndices.push_back(idx);
+                        grid.SetAreaVisible(idx, true);
+                    }
+                }
+            }
+            if (!palp.areaIndices.empty()) {
+                m_activePalpitations.push_back(palp);
+            }
+            break;
+        }
+
+        case ActionType::StopPalpitate: {
+            ClearPalpitations(grid);
+            break;
+        }
+        }
+    }
+}
+
+void AnimationController::ClearPalpitations(PatternGrid& grid) {
+    for (const auto& p : m_activePalpitations) {
+        for (int idx : p.areaIndices) {
+            grid.SetAreaColor(idx, RGB(255, 255, 255));
+        }
+    }
+    m_activePalpitations.clear();
+}
+
+void AnimationController::UpdatePalpitations(double deltaTime, PatternGrid& grid) {
+    for (auto& p : m_activePalpitations) {
+        p.timer += deltaTime;
+
+        // Smooth cosine ease-in-out breathing oscillation (fluid, no jitter, no trompicones)
+        double phase = p.timer * p.frequency * 2.0 * 3.14159265358979323846;
+        double wave = 0.5 - 0.5 * std::cos(phase); // Smooth and continuous between 0.0 and 1.0
+
+        float brightness = p.minBrightness + static_cast<float>(wave) * (p.maxBrightness - p.minBrightness);
+        if (brightness < 0.0f) brightness = 0.0f;
+        if (brightness > 1.0f) brightness = 1.0f;
+
+        int val = static_cast<int>(brightness * 255.0f + 0.5f);
+        if (val < 0) val = 0;
+        if (val > 255) val = 255;
+        COLORREF color = RGB(val, val, val);
+
+        for (int idx : p.areaIndices) {
+            grid.SetAreaColor(idx, color);
+            grid.SetAreaVisible(idx, true);
         }
     }
 }

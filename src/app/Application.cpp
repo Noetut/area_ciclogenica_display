@@ -5,6 +5,8 @@
 #include <sstream>
 #include <thread>
 #include <vector>
+#include <mmsystem.h>
+#include <timeapi.h>
 
 #include "anim/AnimationParser.h"
 #include "util/StringUtil.h"
@@ -391,6 +393,8 @@ void Application::Render() {
 }
 
 void Application::Run() {
+    timeBeginPeriod(1);
+
     using clock = std::chrono::high_resolution_clock;
     auto previousTime = clock::now();
 
@@ -407,13 +411,21 @@ void Application::Run() {
         Update(deltaTime);
         Render();
 
-        // Cap frame rate at 60 FPS to prevent CPU hogging
+        // Cap frame rate precisely at 60 FPS without Windows timer jitter
         auto frameEndTime = clock::now();
         auto frameDuration = frameEndTime - currentTime;
         if (frameDuration < targetFrameDuration) {
-            std::this_thread::sleep_for(targetFrameDuration - frameDuration);
+            auto sleepDuration = targetFrameDuration - frameDuration;
+            if (sleepDuration > std::chrono::milliseconds(2)) {
+                std::this_thread::sleep_for(sleepDuration - std::chrono::milliseconds(1));
+            }
+            while (clock::now() - currentTime < targetFrameDuration) {
+                // Precise spin-wait for sub-millisecond accuracy
+            }
         }
     }
+
+    timeEndPeriod(1);
 
     if (m_mode == AppMode::Calibration && m_calibration.IsDirty()) {
         std::cerr << "[Application] WARNING: exited with UNSAVED calibration changes." << std::endl;
