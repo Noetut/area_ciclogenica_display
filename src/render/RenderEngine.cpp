@@ -265,10 +265,32 @@ void RenderEngine::RenderBlack() {
     FillRect(m_memDC, &rect, m_blackBrush ? m_blackBrush : (HBRUSH)GetStockObject(BLACK_BRUSH));
 }
 
-void RenderEngine::RenderAreas(const std::vector<ProjectionArea>& areas) {
+void RenderEngine::DrawBackgroundVideo(const BYTE* pixels, int videoWidth, int videoHeight) {
+    if (!pixels || videoWidth <= 0 || videoHeight <= 0 || !m_memDC) return;
+
+    BITMAPINFO bmi = {};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = videoWidth;
+    bmi.bmiHeader.biHeight = -videoHeight; // Negative for top-down DIB
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    StretchDIBits(m_memDC,
+                  0, 0, m_width, m_height,
+                  0, 0, videoWidth, videoHeight,
+                  pixels, &bmi, DIB_RGB_COLORS, SRCCOPY);
+}
+
+void RenderEngine::RenderAreas(const std::vector<ProjectionArea>& areas,
+                               const BYTE* bgVideoPixels, int bgVideoWidth, int bgVideoHeight) {
     if (!m_memDC) return;
 
-    RenderBlack();
+    if (bgVideoPixels && bgVideoWidth > 0 && bgVideoHeight > 0) {
+        DrawBackgroundVideo(bgVideoPixels, bgVideoWidth, bgVideoHeight);
+    } else {
+        RenderBlack();
+    }
 
     for (const auto& area : areas) {
         if (!area.isVisible) continue;

@@ -19,6 +19,7 @@ set(SOURCES
     src/calib/CalibrationController.cpp
     src/anim/AnimationParser.cpp
     src/anim/AnimationController.cpp
+    src/media/VideoPlayer.cpp
 )
 
 # Headers
@@ -34,6 +35,7 @@ set(HEADERS
     src/anim/AnimationTypes.h
     src/anim/AnimationParser.h
     src/anim/AnimationController.h
+    src/media/VideoPlayer.h
     src/util/StringUtil.h
 )
 
@@ -47,7 +49,7 @@ if(MINGW)
         PROPERTIES COMPILE_OPTIONS "-Wa,-mbig-obj")
 endif()
 
-# Link Win32 libraries: gdi32 (GDI graphics), user32 (Windowing & Monitor API), msimg32 (AlphaBlend), gdiplus (Image loading & rendering)
-target_link_libraries(PatronAnimation PRIVATE gdi32 user32 msimg32 gdiplus)
+# Link Win32 libraries: gdi32 (GDI graphics), user32 (Windowing & Monitor API), msimg32 (AlphaBlend), gdiplus (Image loading & rendering), Media Foundation (video playback)
+target_link_libraries(PatronAnimation PRIVATE gdi32 user32 msimg32 gdiplus mfplat mfreadwrite mfuuid ole32)
 
 message(STATUS "Configured PatronAnimation target for Win32 build.")

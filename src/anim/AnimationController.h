@@ -3,6 +3,7 @@
 
 #include <string>
 #include "AnimationTypes.h"
+#include "media/VideoPlayer.h"
 
 class PatternGrid;
 class RenderEngine;
@@ -35,9 +36,20 @@ public:
     const std::string& SequenceName() const { return m_sequence.name; }
     const std::string& FilePath() const { return m_filePath; }
 
+    VideoPlayer& GetVideoPlayer() { return m_videoPlayer; }
+    const VideoPlayer& GetVideoPlayer() const { return m_videoPlayer; }
+    bool HasBackgroundVideo() const { return m_videoPlayer.IsPlaying() && m_videoPlayer.HasFrame(); }
+    const BYTE* GetBackgroundVideoFrame(int& outW, int& outH) const {
+        if (!m_videoPlayer.HasFrame() || !m_videoPlayer.IsPlaying()) return nullptr;
+        outW = m_videoPlayer.GetWidth();
+        outH = m_videoPlayer.GetHeight();
+        return m_videoPlayer.GetFrameData();
+    }
+
 private:
     void ApplyFrame(const AnimationFrame& frame, PatternGrid& grid);
 
+    VideoPlayer       m_videoPlayer;
     AnimationSequence m_sequence;
     std::string       m_filePath;
     size_t            m_currentFrameIndex;

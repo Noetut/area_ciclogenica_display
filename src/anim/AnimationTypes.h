@@ -18,7 +18,9 @@ enum class ActionType {
     PreloadImage,
     SetText,
     ClearText,
-    ClearAllTexts
+    ClearAllTexts,
+    SetBackgroundVideo,
+    StopBackgroundVideo
 };
 
 struct AnimationAction {
@@ -27,6 +29,7 @@ struct AnimationAction {
     int         targetId = -1;      // Area id from config (-1 if unused)
     std::string targetName;         // Optional area name if referenced by name
     std::string imagePath;          // Image path / name for SetImage / Preload
+    std::string videoPath;          // Video path / name for SetBackgroundVideo
     std::string text;               // Text content for SetText
     std::string fontFace = "Arial"; // Font family name
     int         fontSize = 32;      // Font size in points
@@ -36,6 +39,7 @@ struct AnimationAction {
 
 struct AnimationFrame {
     double duration = 0.3;          // Duration in seconds to wait before next frame
+    bool   hasExplicitDuration = false; // True if duration was set explicitly (e.g. "0.5s" or "WAIT 1")
     bool   waitForClick = false;    // If true, pauses at this frame waiting for mouse click / cue
     std::string segmentName;        // Optional cue/segment name
     std::vector<AnimationAction> actions;

@@ -308,10 +308,8 @@ void Application::Update(double deltaTime) {
         return;
     }
 
-    // Show mode: advance animation sequence
-    if (m_animController.IsPlaying()) {
-        m_animController.Update(deltaTime, m_grid);
-    }
+    // Show mode: advance animation sequence & background video playback
+    m_animController.Update(deltaTime, m_grid);
 }
 
 void Application::RenderCalibrationOverlay() {
@@ -384,7 +382,9 @@ void Application::Render() {
     if (m_mode == AppMode::Calibration) {
         RenderCalibrationOverlay();
     } else {
-        m_renderEngine.RenderAreas(m_grid.GetAreas());
+        int bgW = 0, bgH = 0;
+        const BYTE* bgPixels = m_animController.GetBackgroundVideoFrame(bgW, bgH);
+        m_renderEngine.RenderAreas(m_grid.GetAreas(), bgPixels, bgW, bgH);
     }
 
     m_renderEngine.EndFrame();

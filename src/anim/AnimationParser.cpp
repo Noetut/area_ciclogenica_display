@@ -106,6 +106,47 @@ bool TryParseDuration(std::string token, double& outSeconds) {
     return false;
 }
 
+// Try parsing wait/delay seconds from token like "1", "1s", "0.5", "500ms", "2.5s"
+bool TryParseWaitSeconds(std::string token, double& outSeconds) {
+    token = Trim(token);
+    if (token.empty()) return false;
+    if (token[0] == '@') token = token.substr(1);
+
+    std::string upper = ToUpper(token);
+    if (upper.size() > 2 && upper.substr(upper.size() - 2) == "MS") {
+        try {
+            double ms = std::stod(token.substr(0, token.size() - 2));
+            outSeconds = ms / 1000.0;
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    if (upper.size() > 1 && upper.back() == 'S') {
+        try {
+            double s = std::stod(token.substr(0, token.size() - 1));
+            outSeconds = s;
+            return true;
+        } catch (...) {
+            return false;
+        }
+    }
+
+    // Pure numbers in WAIT / DELAY context are seconds (e.g. "1" -> 1.0s, "0.5" -> 0.5s, "2" -> 2.0s)
+    try {
+        size_t idx = 0;
+        double val = std::stod(token, &idx);
+        if (idx == token.size()) {
+            outSeconds = val;
+            return true;
+        }
+    } catch (...) {
+    }
+
+    return false;
+}
+
 bool FileExists(const std::wstring& path) {
     DWORD attr = GetFileAttributesW(path.c_str());
     return (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY));
@@ -262,6 +303,7 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
         }
 
         // Frame line format: [duration] ACTION1 [& ACTION2 ...]
+        // Or standalone wait: WAIT 1, WAIT 1.5s, 0.5s, etc.
         std::istringstream lineStream(line);
         std::string firstToken;
         lineStream >> firstToken;
@@ -269,10 +311,27 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
         double frameDuration = outSequence.defaultStep;
         bool hasDuration = false;
 
-        double parsedDuration = 0.0;
-        if (TryParseDuration(firstToken, parsedDuration)) {
-            frameDuration = parsedDuration;
-            hasDuration = true;
+        std::string firstUpper = ToUpper(firstToken);
+        if (firstUpper == "WAIT" || firstUpper == "DELAY" || firstUpper == "SLEEP" || firstUpper == "PAUSE") {
+            std::string waitArg;
+            std::streampos posBefore = lineStream.tellg();
+            if (lineStream >> waitArg) {
+                double waitSec = 0.0;
+                if (TryParseWaitSeconds(waitArg, waitSec)) {
+                    frameDuration = waitSec;
+                    hasDuration = true;
+                } else {
+                    // Not a duration argument, rewind
+                    lineStream.clear();
+                    lineStream.seekg(posBefore);
+                }
+            }
+        } else {
+            double parsedDuration = 0.0;
+            if (TryParseDuration(firstToken, parsedDuration)) {
+                frameDuration = parsedDuration;
+                hasDuration = true;
+            }
         }
 
         // Collect remaining tokens on this line
@@ -287,10 +346,20 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
         }
         commandPart = Trim(commandPart);
         if (commandPart.empty()) {
-            // Just a delay / wait frame
-            AnimationFrame waitFrame;
-            waitFrame.duration = frameDuration;
-            outSequence.frames.push_back(waitFrame);
+            // Just a delay / wait frame (e.g. "WAIT 1" or "1.0s")
+            // If the previous frame didn't specify an explicit duration and has actions,
+            // update its duration directly so the delay applies to that state without extra latency.
+            if (!outSequence.frames.empty() &&
+                !outSequence.frames.back().hasExplicitDuration &&
+                !outSequence.frames.back().actions.empty()) {
+                outSequence.frames.back().duration = frameDuration;
+                outSequence.frames.back().hasExplicitDuration = true;
+            } else {
+                AnimationFrame waitFrame;
+                waitFrame.duration = frameDuration;
+                waitFrame.hasExplicitDuration = true;
+                outSequence.frames.push_back(waitFrame);
+            }
             continue;
         }
 
@@ -309,6 +378,7 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
 
         AnimationFrame frame;
         frame.duration = frameDuration;
+        frame.hasExplicitDuration = hasDuration;
 
         for (const auto& cmdStr : subCommands) {
             std::istringstream cs(cmdStr);
@@ -517,12 +587,34 @@ bool AnimationParser::ParseString(const std::string& content, AnimationSequence&
                     action.imagePath = imgName;
                     frame.actions.push_back(action);
                 }
+            } else if (verbUpper == "BG_VIDEO" || verbUpper == "BGVIDEO" ||
+                       verbUpper == "VIDEO_BG" || verbUpper == "VIDEOBG" ||
+                       verbUpper == "VIDEO" || verbUpper == "PLAY_VIDEO") {
+                std::string videoName;
+                if (NextTokenOrQuoted(cs, videoName)) {
+                    AnimationAction action;
+                    action.type = ActionType::SetBackgroundVideo;
+                    action.videoPath = videoName;
+                    frame.actions.push_back(action);
+                }
+            } else if (verbUpper == "STOP_VIDEO" || verbUpper == "STOPVIDEO" ||
+                       verbUpper == "CLEAR_VIDEO" || verbUpper == "CLEARVIDEO") {
+                AnimationAction action;
+                action.type = ActionType::StopBackgroundVideo;
+                frame.actions.push_back(action);
             } else if (verbUpper == "WAIT_CLICK" || verbUpper == "WAITCLICK" ||
                        verbUpper == "WAIT_FOR_CLICK" || verbUpper == "CLICK" ||
                        verbUpper == "PAUSE_CLICK" || verbUpper == "CUE") {
                 frame.waitForClick = true;
-            } else if (verbUpper == "WAIT" || verbUpper == "PAUSE" || verbUpper == "SLEEP") {
-                // Just delay, no action needed
+            } else if (verbUpper == "WAIT" || verbUpper == "PAUSE" || verbUpper == "SLEEP" || verbUpper == "DELAY") {
+                std::string waitArg;
+                if (cs >> waitArg) {
+                    double waitSec = 0.0;
+                    if (TryParseWaitSeconds(waitArg, waitSec)) {
+                        frame.duration = waitSec;
+                        frame.hasExplicitDuration = true;
+                    }
+                }
             } else {
                 // Unknown command
                 outError = "Line " + std::to_string(lineNumber) + ": Unknown command '" + verb + "'";

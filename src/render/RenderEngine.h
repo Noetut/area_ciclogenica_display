@@ -27,7 +27,9 @@ public:
 
     // --- Show mode --------------------------------------------------------
     void RenderBlack();
-    void RenderAreas(const std::vector<ProjectionArea>& areas);
+    void DrawBackgroundVideo(const BYTE* pixels, int videoWidth, int videoHeight);
+    void RenderAreas(const std::vector<ProjectionArea>& areas,
+                     const BYTE* bgVideoPixels = nullptr, int bgVideoWidth = 0, int bgVideoHeight = 0);
 
     // --- Image & Text rendering ------------------------------------------
     void DrawQuadImage(const Quad& quad, Gdiplus::Bitmap* bitmap);

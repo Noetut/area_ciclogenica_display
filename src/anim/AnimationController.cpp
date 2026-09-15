@@ -1,9 +1,12 @@
 #include "AnimationController.h"
 
 #include <iostream>
+#include <vector>
+#include <windows.h>
 #include "AnimationParser.h"
 #include "model/PatternGrid.h"
 #include "render/RenderEngine.h"
+#include "util/StringUtil.h"
 
 AnimationController::AnimationController()
     : m_currentFrameIndex(0)
@@ -61,16 +64,23 @@ void AnimationController::PreloadImages(RenderEngine& renderEngine) {
 void AnimationController::Play() {
     if (!m_sequence.Empty()) {
         m_isPlaying = true;
+        m_videoPlayer.Play();
     }
 }
 
 void AnimationController::Pause() {
     m_isPlaying = false;
+    m_videoPlayer.Pause();
 }
 
 void AnimationController::TogglePlayPause() {
     if (m_sequence.Empty()) return;
     m_isPlaying = !m_isPlaying;
+    if (m_isPlaying) {
+        m_videoPlayer.Play();
+    } else {
+        m_videoPlayer.Pause();
+    }
     std::cout << "[Animation] " << (m_isPlaying ? "PLAYING" : "PAUSED")
               << " [Frame " << (m_currentFrameIndex + 1) << "/"
               << m_sequence.frames.size() << "]" << std::endl;
@@ -82,10 +92,12 @@ void AnimationController::Stop() {
     m_frameApplied = false;
     m_currentFrameIndex = 0;
     m_frameTimer = 0.0;
+    m_videoPlayer.Stop();
 }
 
 void AnimationController::Restart(PatternGrid& grid) {
     if (m_sequence.Empty()) return;
+    m_videoPlayer.Close();
     if (m_sequence.resetImages) {
         grid.ClearAllImages();
         grid.ClearAllTexts();
@@ -139,6 +151,10 @@ void AnimationController::TriggerClick(PatternGrid& grid) {
 }
 
 void AnimationController::Update(double deltaTime, PatternGrid& grid) {
+    if (m_videoPlayer.IsPlaying()) {
+        m_videoPlayer.Update(deltaTime);
+    }
+
     if (!m_isPlaying || m_sequence.Empty()) return;
 
     // Apply first frame on initial update if not applied yet
@@ -194,6 +210,46 @@ void AnimationController::Update(double deltaTime, PatternGrid& grid) {
 }
 
 namespace {
+
+std::wstring ResolveVideoPath(const std::string& path) {
+    if (path.empty()) return std::wstring();
+
+    std::vector<std::string> candidates;
+    candidates.push_back(path);
+    candidates.push_back(path + ".mp4");
+    candidates.push_back("images/" + path);
+    candidates.push_back("images/" + path + ".mp4");
+    candidates.push_back("../images/" + path);
+    candidates.push_back("../images/" + path + ".mp4");
+    candidates.push_back("../../images/" + path);
+    candidates.push_back("../../images/" + path + ".mp4");
+
+    wchar_t exeBuf[MAX_PATH] = { 0 };
+    DWORD written = GetModuleFileNameW(NULL, exeBuf, MAX_PATH);
+    if (written > 0 && written < MAX_PATH) {
+        std::wstring exePath(exeBuf);
+        size_t slash = exePath.find_last_of(L"\\/");
+        if (slash != std::wstring::npos) {
+            std::string exeDir = WideToUtf8(exePath.substr(0, slash));
+            candidates.push_back(exeDir + "/" + path);
+            candidates.push_back(exeDir + "/" + path + ".mp4");
+            candidates.push_back(exeDir + "/images/" + path);
+            candidates.push_back(exeDir + "/images/" + path + ".mp4");
+            candidates.push_back(exeDir + "/../images/" + path);
+            candidates.push_back(exeDir + "/../images/" + path + ".mp4");
+        }
+    }
+
+    for (const auto& cand : candidates) {
+        std::wstring wide = Utf8ToWide(cand);
+        DWORD attr = GetFileAttributesW(wide.c_str());
+        if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY)) {
+            return wide;
+        }
+    }
+    return std::wstring();
+}
+
 int ResolveTargetIndex(const AnimationAction& action, const PatternGrid& grid) {
     int idx = -1;
     if (action.targetId >= 0) {
@@ -297,6 +353,21 @@ void AnimationController::ApplyFrame(const AnimationFrame& frame, PatternGrid& g
 
         case ActionType::PreloadImage: {
             // Already preloaded at startup, no runtime operation needed
+            break;
+        }
+
+        case ActionType::SetBackgroundVideo: {
+            std::wstring vpath = ResolveVideoPath(action.videoPath);
+            if (!vpath.empty()) {
+                m_videoPlayer.Open(vpath, true);
+            } else {
+                std::cerr << "[AnimationController] Could not resolve background video: " << action.videoPath << std::endl;
+            }
+            break;
+        }
+
+        case ActionType::StopBackgroundVideo: {
+            m_videoPlayer.Close();
             break;
         }
         }
